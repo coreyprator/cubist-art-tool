@@ -1,0 +1,124 @@
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import os
+from cubist_core_logic import run_cubist
+from datetime import datetime
+import traceback
+
+CONFIG_FILE = "last_config.txt"
+LOG_FILE = "run_log.txt"
+
+def log_message(msg):
+    with open(LOG_FILE, "a") as f:
+        f.write(f"[{datetime.now()}] {msg}\n")
+
+log_message("Starting Program")
+
+def load_last_config():
+    config = {}
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as f:
+            for line in f:
+                if '=' in line:
+                    k, v = line.strip().split("=", 1)
+                    config[k.strip()] = v.strip()
+
+    
+
+    # Ensure GUI fields are correctly initialized
+    if "input_image" in config:
+        input_entry.insert(0, config["input_image"])
+    if "output_dir" in config:
+        output_entry.insert(0, config["output_dir"])
+    if "mask_path" in config:
+        mask_entry.insert(0, config["mask_path"])
+    if "total_points" in config:
+        points_entry.delete(0, tk.END)
+        points_entry.insert(0, config["total_points"])
+    if "clip_to_alpha" in config:
+        clip_var.set(config["clip_to_alpha"].lower() == "true")
+
+    log_message("Last config loaded.")
+
+
+def save_config(config):
+    with open(CONFIG_FILE, "w") as f:
+        for k, v in config.items():
+            f.write(f"{k}={v}\n")
+
+def run_process():
+    try:
+        input_path = input_entry.get()
+        output_dir = output_entry.get()
+        mask_path = mask_entry.get()
+        total_points = int(points_entry.get())
+        clip_to_alpha = bool(clip_var.get())
+
+        config = {
+            "input_path": input_path,
+            "output_dir": output_dir,
+            "mask_path": mask_path,
+            "total_points": str(total_points),
+            "clip_to_alpha": str(clip_to_alpha)
+        }
+
+        save_config(config)
+        log_message(f"START: {config}")
+        result_path = run_cubist(input_path, output_dir, total_points, clip_to_alpha, mask_path)
+        log_message(f"SUCCESS: {result_path}")
+
+        if messagebox.askyesno("Success", f"Output saved to: {result_path}. View it?"):
+            os.startfile(result_path)
+    except Exception as e:
+        log_message(f"ERROR: {traceback.format_exc()}")
+        messagebox.showerror("Error", f"An error occurred:\n{e}")
+
+def browse_file(entry):
+    filename = filedialog.askopenfilename()
+    if filename:
+        entry.delete(0, tk.END)
+        entry.insert(0, filename)
+
+def browse_dir(entry):
+    dirname = filedialog.askdirectory()
+    if dirname:
+        entry.delete(0, tk.END)
+        entry.insert(0, dirname)
+
+root = tk.Tk()
+root.title("Cubist Art Generator")
+
+last = load_last_config()
+tk.Label(root, text="Input Image:").grid(row=0, column=0, sticky="e")
+input_entry = tk.Entry(root, width=50)
+input_entry.insert(0, last.get("input_path", ""))
+input_entry.grid(row=0, column=1)
+tk.Button(root, text="Browse", command=lambda: browse_file(input_entry)).grid(row=0, column=2)
+
+tk.Label(root, text="Output Dir:").grid(row=1, column=0, sticky="e")
+output_entry = tk.Entry(root, width=50)
+output_entry.insert(0, last.get("output_dir", ""))
+output_entry.grid(row=1, column=1)
+tk.Button(root, text="Browse", command=lambda: browse_dir(output_entry)).grid(row=1, column=2)
+
+tk.Label(root, text="Mask Image:").grid(row=2, column=0, sticky="e")
+mask_entry = tk.Entry(root, width=50)
+mask_entry.insert(0, last.get("mask_path", ""))
+mask_entry.grid(row=2, column=1)
+tk.Button(root, text="Browse", command=lambda: browse_file(mask_entry)).grid(row=2, column=2)
+
+tk.Label(root, text="Total Points:").grid(row=3, column=0, sticky="e")
+points_entry = tk.Entry(root, width=10)
+points_entry.insert(0, last.get("total_points", "1000"))
+points_entry.grid(row=3, column=1, sticky="w")
+
+clip_var = tk.IntVar(value=int(last.get("clip_to_alpha", "1")))
+tk.Checkbutton(root, text="Clip to Alpha/Mask", variable=clip_var).grid(row=4, column=1, sticky="w")
+
+tk.Button(root, text="Generate", command=run_process).grid(row=5, column=1)
+
+root.mainloop()
+
+
+
+# Version v12d | Timestamp: 2025-07-27 17:32 UTC | Hash: <SHA256>

@@ -1,0 +1,4 @@
+[2025-07-27 14:15:29.934776] INPUT=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg OUTPUT=G:\My Drive\Code\Python\cubist_art\output\Test UI\frame_01_00550pts.png POINTS=550 MASK=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+[2025-07-27 14:15:49.627194] INPUT=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg OUTPUT=G:\My Drive\Code\Python\cubist_art\output\Test UI\frame_01_00550pts.png POINTS=550 MASK=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+[2025-07-27 15:09:33.828589] INPUT=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg OUTPUT=G:/My Drive/Code/Python/cubist_art/output/Test UI\frame_01_01000pts.png POINTS=1000 MASK=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+Canvas shape=(4032, 3024, 3), AvgColor=(93, 126, 115), AlphaPx=12192768
