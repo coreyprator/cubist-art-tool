@@ -1,0 +1,32 @@
+[2025-07-27 14:15:29.934776] INPUT=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg OUTPUT=G:\My Drive\Code\Python\cubist_art\output\Test UI\frame_01_00550pts.png POINTS=550 MASK=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+[2025-07-27 14:15:49.627194] INPUT=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg OUTPUT=G:\My Drive\Code\Python\cubist_art\output\Test UI\frame_01_00550pts.png POINTS=550 MASK=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+[2025-07-27 15:09:33.828589] INPUT=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg OUTPUT=G:/My Drive/Code/Python/cubist_art/output/Test UI\frame_01_01000pts.png POINTS=1000 MASK=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+Canvas shape=(4032, 3024, 3), AvgColor=(93, 126, 115), AlphaPx=12192768
+[2025-07-28 09:37:22.944219] Last config loaded.
+[2025-07-28 09:38:23.603480] Entered run_process
+[2025-07-28 09:38:23.647085] Starting cubist generation
+[2025-07-28 09:38:23.660260] INPUT=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpgG:/My Drive/Code/Python/cubist_art/input/your_input_image.jpgoutput_dir=G:/My Drive/Code/Python/cubist_art/output/Test UImask_path=G:/My Drive/Code/Python/cubist_art/input/edge_mask.pngtotal_points=557clip_to_alpha=True
+[2025-07-28 09:38:23.675013] OUTPUT=G:/My Drive/Code/Python/cubist_art/output/Test UI
+[2025-07-28 09:38:23.691906] POINTS=543
+[2025-07-28 09:38:23.700960] MASK=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+[2025-07-28 09:38:23.715734] CLIP=True
+[2025-07-28 09:38:23.745678] ERROR: Unable to load input image.
+[2025-07-28 09:38:23.761298] Exception: Input image could not be loaded.
+[2025-07-28 09:39:30.138148] Entered run_process
+[2025-07-28 09:39:30.177315] Starting cubist generation
+[2025-07-28 09:39:30.191078] INPUT=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg
+[2025-07-28 09:39:30.203289] OUTPUT=G:/My Drive/Code/Python/cubist_art/output/Test UI
+[2025-07-28 09:39:30.215573] POINTS=543
+[2025-07-28 09:39:30.232518] MASK=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+[2025-07-28 09:39:30.245108] CLIP=True
+[2025-07-28 09:39:31.047779] Output saved to G:/My Drive/Code/Python/cubist_art/output/Test UI\your_input_image_00543pts.png (4096 bytes)
+[2025-07-28 09:39:53.552817] Last config loaded.
+[2025-07-28 09:40:08.134745] Entered run_process
+[2025-07-28 09:40:08.189029] Starting cubist generation
+[2025-07-28 09:40:08.202618] INPUT=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg
+[2025-07-28 09:40:08.219280] OUTPUT=G:/My Drive/Code/Python/cubist_art/output/Test UI
+[2025-07-28 09:40:08.232570] POINTS=501
+[2025-07-28 09:40:08.247120] MASK=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+[2025-07-28 09:40:08.260974] CLIP=True
+[2025-07-28 09:40:08.976466] Output saved to G:/My Drive/Code/Python/cubist_art/output/Test UI\your_input_image_00501pts.png (4096 bytes)
+[2025-07-28 09:40:35.146278] Last config loaded.
