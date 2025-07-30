@@ -1,3 +1,11 @@
+"""
+Cubist Art Generator Config Manager
+
+__version__ = "v12d"
+__author__ = "Corey Prator"
+__date__ = "2025-07-27"
+"""
+
 import json
 import os
 
