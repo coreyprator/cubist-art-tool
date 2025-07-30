@@ -1,0 +1,28 @@
+[2025-07-29 03:40:47,057] ERROR: ERROR: Traceback (most recent call last):
+  File "G:\My Drive\Code\Python\cubist_art\cubist_gui_main.py", line 70, in run_process
+    result_path = run_cubist(input_path, output_dir, mask_path, total_points, clip_to_alpha)
+  File "G:\My Drive\Code\Python\cubist_art\cubist_core_logic.py", line 9, in run_cubist
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+
+[2025-07-29 03:42:34,933] ERROR: ERROR: Traceback (most recent call last):
+  File "G:\My Drive\Code\Python\cubist_art\cubist_gui_main.py", line 70, in run_process
+    result_path = run_cubist(input_path, output_dir, mask_path, total_points, clip_to_alpha)
+  File "G:\My Drive\Code\Python\cubist_art\cubist_core_logic.py", line 9, in run_cubist
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+
+[2025-07-29 03:45:19,323] ERROR: ERROR: Traceback (most recent call last):
+  File "G:\My Drive\Code\Python\cubist_art\cubist_gui_main.py", line 70, in run_process
+    result_path = run_cubist(input_path, output_dir, mask_path, total_points, clip_to_alpha)
+  File "G:\My Drive\Code\Python\cubist_art\cubist_core_logic.py", line 9, in run_cubist
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+
+[2025-07-29 03:45:25,702] ERROR: ERROR: Traceback (most recent call last):
+  File "G:\My Drive\Code\Python\cubist_art\cubist_gui_main.py", line 70, in run_process
+    result_path = run_cubist(input_path, output_dir, mask_path, total_points, clip_to_alpha)
+  File "G:\My Drive\Code\Python\cubist_art\cubist_core_logic.py", line 9, in run_cubist
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+

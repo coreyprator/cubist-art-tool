@@ -1,0 +1,5 @@
+input_path=G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg
+output_dir=G:/My Drive/Code/Python/cubist_art/output/Test UI
+mask_path=G:/My Drive/Code/Python/cubist_art/input/edge_mask.png
+total_points=53
+clip_to_alpha=True

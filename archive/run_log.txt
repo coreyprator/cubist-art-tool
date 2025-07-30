@@ -130,7 +130,3 @@ ValueError: Mask not found or size mismatch: 507
 [2025-07-28 19:20:26.045379] Last config loaded.
 [2025-07-28 19:20:32.573090] START: {'input_path': 'G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg', 'output_dir': 'G:/My Drive/Code/Python/cubist_art/output/Test UI', 'mask_path': 'G:/My Drive/Code/Python/cubist_art/input/edge_mask.png', 'total_points': '508', 'clip_to_alpha': 'True'}
 [2025-07-28 19:21:01.683742] SUCCESS: G:\My Drive\Code\Python\cubist_art\output\Test UI\your_input_image_00508pts.png
-[2025-07-28 22:30:50.600024] Starting Program
-[2025-07-28 22:30:51.313188] Last config loaded.
-[2025-07-28 22:30:58.607763] START: {'input_path': 'G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg', 'output_dir': 'G:/My Drive/Code/Python/cubist_art/output/Test UI', 'mask_path': 'G:/My Drive/Code/Python/cubist_art/input/edge_mask.png', 'total_points': '509', 'clip_to_alpha': 'True'}
-[2025-07-28 22:31:29.203090] SUCCESS: G:\My Drive\Code\Python\cubist_art\output\Test UI\your_input_image_00509pts.png

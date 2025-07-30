@@ -1,3 +1,50 @@
 [2025-07-27 21:29:07.609614] Starting Program
 [2025-07-28 01:16:40.398099] Starting Program
 [2025-07-28 01:16:41.172392] Last config loaded.
+[2025-07-29 03:40:24,848] INFO: Starting Program
+[2025-07-29 03:40:25,236] INFO: Last config loaded.
+[2025-07-29 03:40:46,979] INFO: Config saved.
+[2025-07-29 03:40:46,980] INFO: START: {'input_path': 'G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg', 'output_dir': 'G:/My Drive/Code/Python/cubist_art/output/Test UI', 'mask_path': 'G:/My Drive/Code/Python/cubist_art/input/edge_mask.png', 'total_points': '50', 'clip_to_alpha': 'True'}
+[2025-07-29 03:40:47,057] ERROR: ERROR: Traceback (most recent call last):
+  File "G:\My Drive\Code\Python\cubist_art\cubist_gui_main.py", line 70, in run_process
+    result_path = run_cubist(input_path, output_dir, mask_path, total_points, clip_to_alpha)
+  File "G:\My Drive\Code\Python\cubist_art\cubist_core_logic.py", line 9, in run_cubist
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+
+[2025-07-29 03:42:27,037] INFO: Starting Program
+[2025-07-29 03:42:27,121] INFO: Last config loaded.
+[2025-07-29 03:42:34,887] INFO: Config saved.
+[2025-07-29 03:42:34,888] INFO: START: {'input_path': 'G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg', 'output_dir': 'G:/My Drive/Code/Python/cubist_art/output/Test UI', 'mask_path': 'G:/My Drive/Code/Python/cubist_art/input/edge_mask.png', 'total_points': '51', 'clip_to_alpha': 'True'}
+[2025-07-29 03:42:34,933] ERROR: ERROR: Traceback (most recent call last):
+  File "G:\My Drive\Code\Python\cubist_art\cubist_gui_main.py", line 70, in run_process
+    result_path = run_cubist(input_path, output_dir, mask_path, total_points, clip_to_alpha)
+  File "G:\My Drive\Code\Python\cubist_art\cubist_core_logic.py", line 9, in run_cubist
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+
+[2025-07-29 03:45:11,952] INFO: Starting Program
+[2025-07-29 03:45:12,035] INFO: Last config loaded.
+[2025-07-29 03:45:19,290] INFO: Config saved.
+[2025-07-29 03:45:19,291] INFO: START: {'input_path': 'G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg', 'output_dir': 'G:/My Drive/Code/Python/cubist_art/output/Test UI', 'mask_path': 'G:/My Drive/Code/Python/cubist_art/input/edge_mask.png', 'total_points': '52', 'clip_to_alpha': 'True'}
+[2025-07-29 03:45:19,323] ERROR: ERROR: Traceback (most recent call last):
+  File "G:\My Drive\Code\Python\cubist_art\cubist_gui_main.py", line 70, in run_process
+    result_path = run_cubist(input_path, output_dir, mask_path, total_points, clip_to_alpha)
+  File "G:\My Drive\Code\Python\cubist_art\cubist_core_logic.py", line 9, in run_cubist
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+
+[2025-07-29 03:45:25,683] INFO: Config saved.
+[2025-07-29 03:45:25,684] INFO: START: {'input_path': 'G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg', 'output_dir': 'G:/My Drive/Code/Python/cubist_art/output/Test UI', 'mask_path': 'G:/My Drive/Code/Python/cubist_art/input/edge_mask.png', 'total_points': '52', 'clip_to_alpha': 'True'}
+[2025-07-29 03:45:25,702] ERROR: ERROR: Traceback (most recent call last):
+  File "G:\My Drive\Code\Python\cubist_art\cubist_gui_main.py", line 70, in run_process
+    result_path = run_cubist(input_path, output_dir, mask_path, total_points, clip_to_alpha)
+  File "G:\My Drive\Code\Python\cubist_art\cubist_core_logic.py", line 9, in run_cubist
+    import cv2
+ModuleNotFoundError: No module named 'cv2'
+
+[2025-07-29 03:46:39,977] INFO: Starting Program
+[2025-07-29 03:46:40,058] INFO: Last config loaded.
+[2025-07-29 03:46:54,827] INFO: Config saved.
+[2025-07-29 03:46:54,828] INFO: START: {'input_path': 'G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg', 'output_dir': 'G:/My Drive/Code/Python/cubist_art/output/Test UI', 'mask_path': 'G:/My Drive/Code/Python/cubist_art/input/edge_mask.png', 'total_points': '53', 'clip_to_alpha': 'True'}
+[2025-07-29 03:47:01,000] INFO: SUCCESS: G:\My Drive\Code\Python\cubist_art\output\Test UI\your_input_image_00053pts.png
