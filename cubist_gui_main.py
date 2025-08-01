@@ -8,42 +8,13 @@ __date__ = "2025-07-27"
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import os
+from cubist_logger import log_message, logger
 from cubist_core_logic import run_cubist
 import traceback
-import logging
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "last_config.txt")
-LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "run_log.txt")
-ERROR_LOG_FILE = os.path.join(LOG_DIR, "error_log.txt")
 
-# Configure logging
-logger = logging.getLogger("cubist_gui")
-logger.setLevel(logging.INFO)
-
-# File handler for all logs
-file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
-file_handler.setLevel(logging.INFO)
-file_formatter = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s")
-file_handler.setFormatter(file_formatter)
-logger.addHandler(file_handler)
-
-# File handler for errors only
-error_handler = logging.FileHandler(ERROR_LOG_FILE, encoding="utf-8")
-error_handler.setLevel(logging.ERROR)
-error_formatter = logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s")
-error_handler.setFormatter(error_formatter)
-logger.addHandler(error_handler)
-
-# Console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_formatter = logging.Formatter("%(levelname)s: %(message)s")
-console_handler.setFormatter(console_formatter)
-logger.addHandler(console_handler)
-
-logger.info("Starting Program")
+log_message("Starting Program")
 
 
 
@@ -52,9 +23,9 @@ def save_config(config):
         with open(CONFIG_FILE, "w") as f:
             for k, v in config.items():
                 f.write(f"{k}={v}\n")
-        logger.info("Config saved.")
+        log_message("Config saved.")
     except Exception as e:
-        logger.error(f"Failed to save config: {e}")
+        log_message(f"Failed to save config: {e}", level="error")
 
 def run_process():
     try:
@@ -73,14 +44,14 @@ def run_process():
         }
 
         save_config(config)
-        logger.info(f"START: {config}")
+        log_message(f"START: {config}")
         result_path = run_cubist(input_path, output_dir, mask_path, total_points, clip_to_alpha)
-        logger.info(f"SUCCESS: {result_path}")
+        log_message(f"SUCCESS: {result_path}")
 
         if messagebox.askyesno("Success", f"Output saved to: {result_path}. View it?"):
             os.startfile(result_path)
     except Exception as e:
-        logger.error(f"ERROR: {traceback.format_exc()}")
+        log_message(f"ERROR: {traceback.format_exc()}", level="error")
         messagebox.showerror("Error", f"An error occurred:\n{e}")
 
 def browse_file(entry):
@@ -108,6 +79,7 @@ def load_config():
                 if '=' in line:
                     k, v = line.strip().split("=", 1)
                     config[k.strip()] = v.strip()
+        log_message("Last config loaded.")
     return config
 
 def load_last_config(input_path, output_dir, mask_path, total_points, clip_to_alpha):
@@ -126,7 +98,7 @@ def load_last_config(input_path, output_dir, mask_path, total_points, clip_to_al
         total_points.insert(0, config["total_points"])
     if "clip_to_alpha" in config:
         clip_to_alpha.set(int(config["clip_to_alpha"]) if config["clip_to_alpha"] in ["0", "1"] else int(config["clip_to_alpha"].lower() == "true"))
-    logger.info("Last config loaded.")
+    log_message("Last config loaded.")
 
 
 

@@ -26,3 +26,9 @@ ModuleNotFoundError: No module named 'cv2'
     import cv2
 ModuleNotFoundError: No module named 'cv2'
 
+[2025-07-30 13:26:27,896] ERROR: EXCEPTION: invalid_mode failed with error: [ValueError: Unsupported geometry mode: invalid_mode]
+[2025-07-30 13:47:38,993] ERROR: EXCEPTION: invalid_mode failed with error: [ValueError: Unsupported geometry mode: invalid_mode]
+[2025-07-30 14:08:34,746] ERROR: EXCEPTION: invalid_mode failed with error: [ValueError: Unsupported geometry mode: invalid_mode]
+[2025-07-30 14:09:24,094] ERROR: EXCEPTION: invalid_mode failed with error: [ValueError: Unsupported geometry mode: invalid_mode]
+[2025-07-30 14:20:57,652] ERROR: EXCEPTION: invalid_mode failed with error: [ValueError: Unsupported geometry mode: invalid_mode]
+[2025-07-30 14:21:47,239] ERROR: EXCEPTION: invalid_mode failed with error: [ValueError: Unsupported geometry mode: invalid_mode]
