@@ -3,11 +3,17 @@
 This file tracks the implementation plan for version 2 of the app.
 
 ## 🧱 Phase 1: Geometry Engine Upgrade
-- [ ] Refactor core logic to support multiple geometry modes
-- [ ] Implement Voronoi fill mode
-- [ ] Implement rectangle fill mode
-- [ ] Add geometry_mode field to config
-- [ ] Output files include geometry type in filename
+- [x] Refactor core logic to support multiple geometry modes
+- [x] Implement Voronoi fill mode
+- [x] Implement rectangle fill mode
+- [x] Add geometry_mode field to config
+- [x] Output files include geometry type in filename
+- [x] Add CascadeFill toggle for all geometry modes
+- [x] Create comprehensive CLI testing script
+- [x] **ENHANCED**: Implement spatial optimization for cascade fill
+- [x] **ENHANCED**: Add adjacency-based placement for better space utilization
+- [x] **ENHANCED**: Implement distance transform and priority mapping
+- [x] **ENHANCED**: Add rotational variety and organic shape generation
 
 ## 🎨 Phase 2: Color LUT & Palette System
 - [ ] Load external LUT file (e.g., .cube, JSON)
@@ -16,9 +22,10 @@ This file tracks the implementation plan for version 2 of the app.
 - [ ] Enable palette-constrained mode
 
 ## 🧪 Phase 3: Stepwise Fill Preview (CLI)
-- [ ] Implement incremental shape-fill preview logic
-- [ ] Export each step as a separate PNG (batch mode)
-- [ ] Allow step size setting in config
+- [x] Implement incremental shape-fill preview logic (CascadeFill)
+- [x] Export each step as a separate PNG (batch mode)
+- [x] Allow step size setting in config (save_step_frames parameter)
+- [x] Create CLI interface for testing all modes
 
 ## 🧰 Phase 4: Presets & Config Loader
 - [ ] Load/save presets (geometry + color settings)
