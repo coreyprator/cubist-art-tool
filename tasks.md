@@ -27,6 +27,16 @@ This file tracks the implementation plan for version 2 of the app.
 - [x] Allow step size setting in config (save_step_frames parameter)
 - [x] Create CLI interface for testing all modes
 
+## 🎯 Phase 3.5: Density-Guided Point Sampling
+- [x] Add `--density_mask` CLI option for grayscale density maps
+- [x] Implement rejection sampling based on density probabilities
+- [x] Replace random point generation with density-guided sampling
+- [x] Add fallback to random sampling when no density map provided
+- [x] Ensure compatibility with all geometry types (delaunay, voronoi, rectangles)
+- [x] Add comprehensive logging for density sampling iterations
+- [x] Optional: Add density map visualization for debugging
+- [x] Test density sampling with various density map patterns
+
 ## 🧰 Phase 4: Presets & Config Loader
 - [ ] Load/save presets (geometry + color settings)
 - [ ] Add preset manager CLI options
