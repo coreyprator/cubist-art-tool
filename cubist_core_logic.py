@@ -1,9 +1,3 @@
-# GOAL: Implement actual triangulation logic to replace placeholder stub.
-# FILE AFFECTED: cubist_core_logic.py
-# INTERFACE IMPACT: None – this affects only backend logic, no GUI or CLI changes.
-# VALIDATION: Visual inspection of the output image will confirm triangulation is correctly rendered.
-# VERSION: v12j – update inline version footer and comments to reflect new logic.
-# CHANGELOG: To be updated separately once testing is complete.
 """
 Cubist Art Generator Core Logic
 
@@ -66,10 +60,17 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
         if mask is None or mask.shape != (height, width):
             logger.error(f"Mask not found or size mismatch: {mask_path}")
             raise ValueError(f"Mask not found or size mismatch: {mask_path}")
+        
+        # For transparency: white (255) = keep opaque, non-white < 255 = make transparent
+        # valid_mask is used for shape placement (any non-black pixel)
         valid_mask = (mask > 0) & (alpha > 0)
-        logger.info(f"Using mask with {np.sum(valid_mask)} valid pixels")
+        
+        # Create alpha channel for final output: only white pixels remain opaque
+        mask_alpha = np.where(mask == 255, 255, 0).astype(np.uint8)
+        logger.info(f"Using mask with {np.sum(valid_mask)} valid pixels for placement, {np.sum(mask_alpha == 255)} pixels will be opaque")
     else:
         valid_mask = (alpha > 0)
+        mask_alpha = None
         logger.info(f"No mask provided, using alpha channel with {np.sum(valid_mask)} valid pixels")
 
     # Sample points from valid region
@@ -77,7 +78,31 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
     if len(valid_coords) < 4:
         logger.error("Not enough valid pixels to sample points")
         raise ValueError("Not enough valid pixels to sample points.")
-    idxs = np.random.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
+
+    # Check if mask is a density mask (edge density guidance)
+    if mask_path is not None:
+        mask_name = Path(mask_path).stem.lower()
+        if "edge_density" in mask_name:
+            logger.info("Using density-guided sampling from edge density mask")
+            # For density masks: use mask values as sampling weights
+            mask_weights = mask.astype(np.float32) / 255.0
+            # Normalize weights so higher values = more likely to be sampled
+            valid_weights = mask_weights[valid_mask]
+            if np.sum(valid_weights) > 0:
+                valid_weights = valid_weights / np.sum(valid_weights)
+                idxs = np.random.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), 
+                                  replace=False, p=valid_weights)
+            else:
+                # Fallback to uniform sampling if weights are all zero
+                idxs = np.random.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
+        else:
+            logger.info("Using uniform sampling (regular mask)")
+            # Regular transparency mask: uniform sampling
+            idxs = np.random.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
+    else:
+        logger.info("Using uniform sampling (no mask)")
+        idxs = np.random.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
+
     pts = valid_coords[idxs][:, [1, 0]]  # (x, y)
     logger.info(f"Sampled {len(pts)} points from valid region")
 
@@ -98,15 +123,41 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
         geometry = generate_geometry(pts, (height, width), geometry_mode, use_cascade_fill=False)
         canvas = render_geometry(image_rgb, valid_mask, geometry, pts, geometry_mode)
 
-    # Preserve alpha in output
-    canvas_rgba = np.dstack((canvas, alpha))
+    # Apply proper alpha channel based on mask
+    if mask_path is not None:
+        mask_name = Path(mask_path).stem.lower()
+        if "edge_density" in mask_name:
+            logger.info("Edge density mask - using original alpha channel")
+            # For edge density masks: don't modify transparency, just use for sampling
+            final_alpha = alpha
+        else:
+            logger.info("Regular mask - applying mask-based transparency")
+            # Use mask-based alpha: white areas = opaque, non-white = transparent
+            final_alpha = mask_alpha
+            logger.info(f"Applied mask-based transparency: {np.sum(final_alpha == 255)} opaque pixels")
+    else:
+        # Use original alpha channel
+        final_alpha = alpha
+    
+    # Create RGBA output
+    canvas_rgba = np.dstack((canvas, final_alpha))
     import datetime
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Update output filename to include cascade flag and mask status
     cascade_flag = "cascade" if use_cascade_fill else "regular"
-    mask_flag = "_masked" if mask_path is not None else ""
-    output_name = f"your_input_image_{total_points:05d}pts_{geometry_mode}_{cascade_flag}{mask_flag}_{timestamp}.png"
+    mask_flag = ""
+    if mask_path is not None:
+        mask_name = Path(mask_path).stem.lower()
+        if "edge_density" in mask_name:
+            mask_flag = "_edge_density_mask"
+        else:
+            mask_flag = "_masked"
+
+    # Check if this is a background image and add prefix
+    bg_prefix = "bg_" if "bg_" in str(input_path).lower() else ""
+    
+    output_name = f"{bg_prefix}your_input_image_{total_points:05d}pts_{geometry_mode}_{cascade_flag}{mask_flag}_{timestamp}.png"
     output_path = Path(output_dir) / output_name
     logger.info(f"Saving output to: {output_path}")
     cv2.imwrite(str(output_path), cv2.cvtColor(canvas_rgba, cv2.COLOR_RGBA2BGRA))
@@ -569,263 +620,100 @@ def find_optimal_placement(available_mask, occupied_mask, shape_size, mode, is_f
         # Fallback to any positive priority location
         best_locations = np.argwhere(priority_map > 0)
     
-    if len(best_locations) == 0:
-        return None, None
-    
-    # Select from best locations with some randomness
-    selected_idx = np.random.choice(len(best_locations))
+    # Randomly select one of the best locations
+    selected_idx = np.random.randint(0, len(best_locations))
     center_y, center_x = best_locations[selected_idx]
     
     selection_time = time.perf_counter() - selection_start
-    logger.debug(f"Final selection completed in {selection_time:.3f}s from {len(best_locations)} candidates")
-    logger.debug(f"Selected placement: ({center_x}, {center_y})")
+    logger.info(f"Optimal placement found at ({center_x}, {center_y}), selection time: {selection_time:.3f}s")
     
     return int(center_x), int(center_y)
 
 
-def generate_shape_mask(center_x, center_y, size, mode, image_shape, available_mask=None, occupied_mask=None):
+def generate_shape_mask(center_x, center_y, size, mode, image_shape, available_mask, occupied_mask):
     """
-    Generate a spatially-aware shape mask based on the specified geometry mode.
+    Generate a mask for the shape to be placed, based on the desired mode.
     
     Args:
-        center_x (int): X coordinate of shape center.
-        center_y (int): Y coordinate of shape center.
-        size (int): Approximate size of the shape.
+        center_x (int): X-coordinate of the shape center.
+        center_y (int): Y-coordinate of the shape center.
+        size (int): Size of the shape.
         mode (str): Geometry mode ('delaunay', 'voronoi', 'rectangles').
         image_shape (tuple): (height, width) of the image.
-        available_mask (np.ndarray, optional): Boolean mask of available pixels.
-        occupied_mask (np.ndarray, optional): Boolean mask of occupied pixels.
+        available_mask (np.ndarray): Boolean mask of available pixels.
+        occupied_mask (np.ndarray): Boolean mask of occupied pixels.
     
     Returns:
-        np.ndarray: Boolean mask of the shape, or None if generation fails.
+        np.ndarray: Boolean mask of the shape area.
     """
-    import cv2
     import numpy as np
-    from scipy.spatial import Delaunay
+    import cv2
     
     height, width = image_shape
-    mask = np.zeros((height, width), dtype=bool)
     
-    # Ensure center point is within bounds
-    center_x = np.clip(center_x, 0, width - 1)
-    center_y = np.clip(center_y, 0, height - 1)
-    
-    # Adaptive size based on available space
-    if available_mask is not None:
-        # Check local area to adapt size
-        search_radius = min(size, min(height, width) // 4)
-        y_min = max(0, center_y - search_radius)
-        y_max = min(height, center_y + search_radius + 1)
-        x_min = max(0, center_x - search_radius)
-        x_max = min(width, center_x + search_radius + 1)
+    if mode == "delaunay":
+        logger.info(f"Generating Delaunay mask at ({center_x}, {center_y}), size {size}")
+        # For Delaunay, generate a triangular mask around the center
+        triangle_mask = np.zeros((height, width), dtype=bool)
         
-        local_available = available_mask[y_min:y_max, x_min:x_max]
-        if np.any(local_available):
-            available_ratio = np.sum(local_available) / local_available.size
-            # Reduce size if area is constrained
-            if available_ratio < 0.5:
-                size = int(size * (available_ratio + 0.3))
-    
-    # Minimum size check
-    size = max(size, 4)
-    
-    if mode == "rectangles":
-        # Generate adaptive rectangular shapes with independent width/height
-        # Use independent random dimensions for more artistic variation
-        rect_width = int(size * np.random.uniform(0.5, 2.0))
-        rect_height = int(size * np.random.uniform(0.5, 2.0))
+        # Create a random triangle around the center
+        pts = np.array([[center_x, center_y], 
+                        [center_x + size * np.cos(2*np.pi/3), center_y + size * np.sin(2*np.pi/3)],
+                        [center_x + size * np.cos(4*np.pi/3), center_y + size * np.sin(4*np.pi/3)]])
+        pts = pts.astype(np.int32)
         
-        # Ensure minimum size
-        rect_width = max(rect_width, 4)
-        rect_height = max(rect_height, 4)
+        cv2.fillConvexPoly(triangle_mask, pts, 1)
         
-        half_width = rect_width // 2
-        half_height = rect_height // 2
+        # Ensure the mask is within bounds
+        triangle_mask = np.clip(triangle_mask, 0, 1)
         
-        # Add slight rotation for more organic feel
-        angle = np.random.uniform(-15, 15)  # Small rotation in degrees
+        # Combine with available mask
+        final_mask = triangle_mask & available_mask
         
-        if abs(angle) > 2:  # Apply rotation if significant
-            # Create rotated rectangle with independent dimensions
-            box_points = np.array([
-                [-half_width, -half_height],
-                [half_width, -half_height],
-                [half_width, half_height],
-                [-half_width, half_height]
-            ], dtype=np.float32)
-            
-            # Rotation matrix
-            angle_rad = np.radians(angle)
-            cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
-            rotation_matrix = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
-            
-            # Apply rotation and translation
-            rotated_points = np.dot(box_points, rotation_matrix.T)
-            rotated_points[:, 0] += center_x
-            rotated_points[:, 1] += center_y
-            rotated_points = rotated_points.astype(np.int32)
-            
-            # Clamp points to stay within image bounds
-            rotated_points[:, 0] = np.clip(rotated_points[:, 0], 0, width - 1)
-            rotated_points[:, 1] = np.clip(rotated_points[:, 1], 0, height - 1)
-            
-            temp_mask = np.zeros((height, width), dtype=np.uint8)
-            cv2.fillPoly(temp_mask, [rotated_points], 1)
-            mask = temp_mask.astype(bool)
-        else:
-            # Simple axis-aligned rectangle with independent dimensions
-            # Calculate bounds centered on (center_x, center_y)
-            x0 = center_x - half_width
-            x1 = center_x + half_width
-            y0 = center_y - half_height
-            y1 = center_y + half_height
-            
-            # Clamp to image bounds while maintaining centering as much as possible
-            x0 = max(0, x0)
-            x1 = min(width, x1)
-            y0 = max(0, y0)
-            y1 = min(height, y1)
-            
-            # If clamping moved us off-center, try to rebalance
-            if x0 == 0 and x1 < width:
-                # Shift right if possible
-                shift_right = min(width - x1, center_x - half_width)
-                if shift_right > 0:
-                    x1 = min(width, x1 + shift_right)
-            elif x1 == width and x0 > 0:
-                # Shift left if possible
-                shift_left = min(x0, (center_x + half_width) - width)
-                if shift_left > 0:
-                    x0 = max(0, x0 - shift_left)
-            
-            if y0 == 0 and y1 < height:
-                # Shift down if possible
-                shift_down = min(height - y1, center_y - half_height)
-                if shift_down > 0:
-                    y1 = min(height, y1 + shift_down)
-            elif y1 == height and y0 > 0:
-                # Shift up if possible
-                shift_up = min(y0, (center_y + half_height) - height)
-                if shift_up > 0:
-                    y0 = max(0, y0 - shift_up)
-            
-            # Ensure we have valid bounds
-            if x1 > x0 and y1 > y0:
-                mask[y0:y1, x0:x1] = True
-        
-    elif mode == "delaunay":
-        # Generate triangular shapes using constrained Delaunay triangulation
-        num_points = np.random.randint(3, 6)  # 3-5 points for triangulation
-        
-        # Create points with better distribution
-        if occupied_mask is not None and np.any(occupied_mask):
-            # Try to create shapes that fit well with existing geometry
-            angles = np.random.uniform(0, 2*np.pi, num_points)
-            # Vary radii more to create interesting shapes
-            base_radii = np.random.uniform(size//4, size, num_points)
-            
-            # Add some angular variation for more organic shapes
-            for i in range(len(angles)):
-                if i > 0:
-                    # Avoid too-similar angles
-                    min_angle_diff = np.pi / 4
-                    while any(abs(angles[i] - angles[j]) < min_angle_diff for j in range(i)):
-                        angles[i] = np.random.uniform(0, 2*np.pi)
-            
-            radii = base_radii
-        else:
-            # First shape or no constraints - use regular distribution
-            angles = np.linspace(0, 2*np.pi, num_points, endpoint=False)
-            angles += np.random.uniform(0, 2*np.pi/num_points)  # Add random offset
-            radii = np.random.uniform(size//3, size, num_points)
-        
-        points = []
-        for angle, radius in zip(angles, radii):
-            x = center_x + radius * np.cos(angle)
-            y = center_y + radius * np.sin(angle)
-            x = np.clip(int(x), 0, width - 1)
-            y = np.clip(int(y), 0, height - 1)
-            points.append([x, y])
-        
-        # Remove duplicate points
-        points = np.array(points)
-        unique_points = []
-        for point in points:
-            if not any(np.allclose(point, existing, atol=1) for existing in unique_points):
-                unique_points.append(point)
-        
-        if len(unique_points) >= 3:
-            points = np.array(unique_points)
-            try:
-                tri = Delaunay(points)
-                temp_mask = np.zeros((height, width), dtype=np.uint8)
-                for simplex in tri.simplices:
-                    triangle_pts = points[simplex].astype(np.int32)
-                    cv2.fillConvexPoly(temp_mask, triangle_pts, 1)
-                mask = temp_mask.astype(bool)
-            except Exception:
-                # Fallback to convex hull if triangulation fails
-                try:
-                    hull_points = cv2.convexHull(points.astype(np.int32))
-                    temp_mask = np.zeros((height, width), dtype=np.uint8)
-                    cv2.fillPoly(temp_mask, [hull_points], 1)
-                    mask = temp_mask.astype(bool)
-                except Exception:
-                    # Final fallback to circle
-                    temp_mask = np.zeros((height, width), dtype=np.uint8)
-                    cv2.circle(temp_mask, (center_x, center_y), size//2, 1, -1)
-                    mask = temp_mask.astype(bool)
+        return final_mask.astype(bool)
     
     elif mode == "voronoi":
-        # Generate organic polygon shapes (enhanced Voronoi-like cells)
-        num_vertices = np.random.randint(4, 9)  # 4-8 vertices for variety
+        logger.info(f"Generating Voronoi mask at ({center_x}, {center_y}), size {size}")
+        # For Voronoi, generate a polygonal mask around the center
+        polygon_mask = np.zeros((height, width), dtype=bool)
         
-        # Create more natural, organic shapes
-        base_angles = np.linspace(0, 2*np.pi, num_vertices, endpoint=False)
-        # Add angular noise for organic feel
-        angle_noise = np.random.normal(0, np.pi/8, num_vertices)
-        angles = base_angles + angle_noise
-        angles = np.sort(angles % (2*np.pi))  # Keep in [0, 2π] and sort
+        # Create a random polygon (e.g., hexagon) around the center
+        num_vertices = 6
+        angle_step = 2 * np.pi / num_vertices
+        pts = np.array([[center_x + size * np.cos(i * angle_step), 
+                          center_y + size * np.sin(i * angle_step)] for i in range(num_vertices)])
+        pts = pts.astype(np.int32)
         
-        # Variable radii with smooth transitions
-        base_radius = size * 0.7
-        radius_variation = size * 0.3
-        radii = []
+        cv2.fillConvexPoly(polygon_mask, pts, 1)
         
-        for i, angle in enumerate(angles):
-            # Create smooth radius variation using sine waves
-            variation = np.sin(angle * 3) * 0.3 + np.sin(angle * 7) * 0.1
-            radius = base_radius + radius_variation * variation
-            # Add some random noise
-            radius += np.random.uniform(-size*0.1, size*0.1)
-            radius = max(size//4, radius)  # Minimum radius
-            radii.append(radius)
+        # Ensure the mask is within bounds
+        polygon_mask = np.clip(polygon_mask, 0, 1)
         
-        points = []
-        for angle, radius in zip(angles, radii):
-            x = center_x + radius * np.cos(angle)
-            y = center_y + radius * np.sin(angle)
-            x = np.clip(int(x), 0, width - 1)
-            y = np.clip(int(y), 0, height - 1)
-            points.append([x, y])
+        # Combine with available mask
+        final_mask = polygon_mask & available_mask
         
-        if len(points) >= 3:
-            polygon = np.array(points, dtype=np.int32)
-            temp_mask = np.zeros((height, width), dtype=np.uint8)
-            cv2.fillPoly(temp_mask, [polygon], 1)
-            mask = temp_mask.astype(bool)
+        return final_mask.astype(bool)
     
-    # Final validation - ensure shape is within available area
-    if available_mask is not None:
-        mask = mask & available_mask
+    elif mode == "rectangles":
+        logger.info(f"Generating rectangular mask at ({center_x}, {center_y}), size {size}")
+        # For rectangles, simply create a square mask
+        rect_mask = np.zeros((height, width), dtype=bool)
+        
+        x0 = max(0, center_x - size // 2)
+        x1 = min(width, center_x + size // 2)
+        y0 = max(0, center_y - size // 2)
+        y1 = min(height, center_y + size // 2)
+        
+        rect_mask[y0:y1, x0:x1] = 1
+        
+        # Ensure the mask is within bounds
+        rect_mask = np.clip(rect_mask, 0, 1)
+        
+        # Combine with available mask
+        final_mask = rect_mask & available_mask
+        
+        return final_mask.astype(bool)
     
-    # Check if the generated shape is valid (has some area)
-    if not np.any(mask):
+    else:
+        logger.error(f"Unsupported geometry mode for mask generation: {mode}")
         return None
-    
-    # Ensure minimum shape size
-    shape_area = np.sum(mask)
-    if shape_area < 4:  # At least 4 pixels
-        return None
-    
-    return mask
