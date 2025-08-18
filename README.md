@@ -59,3 +59,5 @@ If your editor shows “phantom” lines, disable “Code Lens”/Minimap diff o
 - **SVG parity test**: counts `<polygon>`/`<path>` (mode-aware) and compares to raster shape count.
 
 ### METRICS Example
+
+![CI](https://github.com/coreyprator/cubist-art-tool/actions/workflows/ci.yml/badge.svg)
