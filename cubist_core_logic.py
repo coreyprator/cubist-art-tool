@@ -11,23 +11,27 @@ from cubist_logger import logger
 from typing import List, Dict, Tuple, Optional
 
 def sample_points_deterministic(img, total_points, seed):
-    """
-    Deterministically sample points from the valid region of img using the given seed.
-    Returns an (N,2) array of (x, y) points.
-    """
     import numpy as np
-    rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
-    height, width = img.shape[:2]
-    valid_mask = np.ones((height, width), dtype=bool)
-    valid_coords = np.argwhere(valid_mask)
-    if len(valid_coords) < 4:
-        raise ValueError("Not enough valid pixels to sample points.")
-    idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
-    sampled_points = valid_coords[idxs][:, [1, 0]]  # (x, y)
-    return sampled_points
+    rng = np.random.default_rng(seed if seed is not None else 123456789)
+    h, w = img.shape[:2]
+    xs = rng.integers(0, w, size=total_points)
+    ys = rng.integers(0, h, size=total_points)
+    pts = np.stack([xs, ys], axis=1).astype(np.int32)
+    return pts
 
-def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_to_alpha=True,
-               verbose=True, geometry_mode="delaunay", use_cascade_fill=False, save_step_frames=False, seed: int = None):
+def run_cubist(
+    input_path,
+    output_dir,
+    mask_path=None,
+    total_points=1000,
+    clip_to_alpha=True,
+    verbose=True,
+    geometry_mode="delaunay",
+    use_cascade_fill=False,
+    save_step_frames=False,
+    seed: int = None,
+    cascade_stages: int = 3,
+):
     """
     Generate a cubist-style image using the specified geometry mode.
 
@@ -94,73 +98,81 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
         random.seed(seed)
 
     # --- Deterministic point sampling ---
-    def _sample_points(valid_mask, total_points, seed):
-        valid_coords = np.argwhere(valid_mask)
-        if len(valid_coords) < 4:
-            logger.error("Not enough valid pixels to sample points")
-            raise ValueError("Not enough valid pixels to sample points.")
-        rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
-        idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
-        sampled_points = valid_coords[idxs][:, [1, 0]]  # (x, y)
-        return sampled_points
-
+    base_points = sample_points_deterministic(image_rgb, total_points, seed)
     requested_points = total_points
-    sampled_points = _sample_points(valid_mask, total_points, seed)
-    pts = sampled_points.copy()
     corners_added = 0
-    if geometry_mode in ("delaunay", "voronoi"):
-        corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
-        pts = np.vstack([pts, corners])
-        corners_added = 4
-    logger.info(f"Points: requested={requested_points}, sampled={len(sampled_points)}, corners_added={corners_added}, total_after_corners={len(pts)}")
 
-    # --- Cascade fill logic ---
+    metrics_stages = []
+    shapes = []
+    sampled_points = base_points.copy()
+    pts = sampled_points.copy()
+
     if use_cascade_fill:
-        # Use the same sampled points for all cascade stages
-        cascade_metrics = []
-        # For demonstration, let's say cascade has 3 stages (could be parameterized)
-        n_stages = 3
-        stage_points = np.array_split(pts, n_stages)
-        canvas = np.zeros_like(image_rgb)
-        all_shapes = []
-        for i, stage_pts in enumerate(stage_points):
-            logger.info(f"Cascade stage {i+1}/{n_stages}: {len(stage_pts)} points")
-            geometry = generate_geometry(stage_pts, (height, width), geometry_mode, use_cascade_fill=False)
-            canvas_stage, shapes = render_geometry(
-                image_rgb, valid_mask, geometry, stage_pts, geometry_mode,
+        # Deterministic cascade: each stage uses a prefix of base_points
+        n_stages = cascade_stages if cascade_stages and cascade_stages > 0 else 3
+        stage_shapes = []
+        for i in range(n_stages):
+            n_i = max(1, (total_points * (i + 1)) // n_stages)
+            pts_i = base_points[:n_i]
+            corners_added_i = 4 if geometry_mode in ("delaunay", "voronoi") else 0
+            if geometry_mode in ("delaunay", "voronoi"):
+                corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
+                pts_stage = np.vstack([pts_i, corners])
+            else:
+                pts_stage = pts_i
+            logger.info(f"Cascade stage {i+1}/{n_stages}: {len(pts_stage)} points")
+            geometry = generate_geometry(pts_stage, (height, width), geometry_mode, use_cascade_fill=False)
+            canvas_stage, stage_shapes_i = render_geometry(
+                image_rgb, valid_mask, geometry, pts_stage, geometry_mode,
                 shapes_accumulator=None
             )
-            all_shapes.extend(shapes)
+            stage_shapes.append(stage_shapes_i)
             # Optionally blend canvas_stage into canvas, or just keep last
             canvas = canvas_stage
-            cascade_metrics.append({
-                "stage": i+1,
-                "points": len(stage_pts),
-                "shapes": len(shapes)
+            metrics_stages.append({
+                "stage": i + 1,
+                "geometry_mode": geometry_mode,
+                "points": int(len(pts_stage)),
+                "svg_shape_count": int(len(stage_shapes_i)),
+                "seed": seed,
             })
-        shapes = all_shapes
-        metrics_dict = {
-            "cascade_stages": cascade_metrics,
-            "total_shapes": len(all_shapes),
-            "total_points": len(pts),
-            "requested_points": requested_points,
-            "corners_added": corners_added,
+        # For output, use the last stage's shapes
+        shapes = stage_shapes[-1]
+        corners_added = 4 if geometry_mode in ("delaunay", "voronoi") else 0
+        sampled_points = base_points
+        metrics_totals = {
+            "geometry_mode": geometry_mode,
+            "points": total_points,
+            "stages": n_stages,
+            "seed": seed,
+            "svg_shape_count": int(len(shapes)),
         }
     else:
         # Use regular tessellation approach
         logger.info("Using regular tessellation approach")
+        if geometry_mode in ("delaunay", "voronoi"):
+            corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
+            pts = np.vstack([pts, corners])
+            corners_added = 4
         geometry = generate_geometry(pts, (height, width), geometry_mode, use_cascade_fill=False)
         shapes: list[dict] = []
         canvas, shapes = render_geometry(
             image_rgb, valid_mask, geometry, pts, geometry_mode,
             shapes_accumulator=None
         )
-        metrics_dict = {
-            "cascade_stages": None,
-            "total_shapes": len(shapes),
-            "total_points": len(pts),
-            "requested_points": requested_points,
-            "corners_added": corners_added,
+        metrics_stages = [{
+            "stage": 1,
+            "geometry_mode": geometry_mode,
+            "points": int(len(pts)),
+            "svg_shape_count": int(len(shapes)),
+            "seed": seed,
+        }]
+        metrics_totals = {
+            "geometry_mode": geometry_mode,
+            "points": total_points,
+            "stages": 1,
+            "seed": seed,
+            "svg_shape_count": int(len(shapes)),
         }
 
     # Apply proper alpha channel based on mask
@@ -180,11 +192,9 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
         final_alpha = alpha
     
     # Create RGBA output
-    canvas_rgba = np.dstack((canvas, final_alpha))
+    canvas_rgba = np.dstack((canvas, alpha if mask_alpha is None else mask_alpha))
     import datetime
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Update output filename to include cascade flag and mask status
     cascade_flag = "cascade" if use_cascade_fill else "regular"
     mask_flag = ""
     if mask_path is not None:
@@ -193,10 +203,7 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
             mask_flag = "_edge_density_mask"
         else:
             mask_flag = "_masked"
-
-    # Check if this is a background image and add prefix
     bg_prefix = "bg_" if "bg_" in str(input_path).lower() else ""
-    
     output_name = f"{bg_prefix}your_input_image_{total_points:05d}pts_{geometry_mode}_{cascade_flag}{mask_flag}_{timestamp}.png"
     output_path = Path(output_dir) / output_name
     logger.info(f"Saving output to: {output_path}")
@@ -204,18 +211,13 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
     if verbose:
         print(f"Saved: {os.path.abspath(str(output_path))}")
     logger.info(f"run_cubist() EXIT: Successfully saved {output_path}")
-    final_png_path = output_path  # or whatever variable holds the PNG path
-    # Save PNG as before...
-    # SVG export (when a path was supplied)
-    # (SVG writing is now handled in cubist_cli.py, not here)
-    # Emit a METRICS line for the validator
-    metrics = {
-        "geometry": geometry_mode,
-        "requested_points": int(requested_points),
-        "total_points_after_corners": int(len(pts)),
-        "shape_count": int(len(shapes)),
+    final_png_path = output_path
+
+    # Return metrics dict for CLI
+    metrics_dict = {
+        "stages": metrics_stages,
+        "totals": metrics_totals,
     }
-    print(f"METRICS: {metrics}")
     return output_path, shapes, (width, height), sampled_points, metrics_dict
 
 

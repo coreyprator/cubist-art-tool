@@ -43,43 +43,22 @@ def _to_css(val):
         return _rgb_tuple_to_css(val)
     return str(val) if val is not None else "#000000"
 
-def write_svg(
-    svg_path: str,
-    shapes: list,
-    width: int,
-    height: int,
-    geometry_mode: str,
-    palette=None,
-    stroke=None,
-    stroke_width: float = 0.0,
-    background=None,
-    max_shapes: int | None = None
-) -> None:
+def write_svg(svg_path, width, height, shapes, background=None, stroke="none", stroke_width=0):
     """
-    Write SVG from provided shapes (no resampling, no preview limit unless max_shapes is set).
+    shapes: list of {"points": [(x,y), ...], "fill": (r,g,b)}
     """
-    if max_shapes is not None:
-        shapes = shapes[:max_shapes]
-    print(f"SVG write: shapes={len(shapes)}, geometry={geometry_mode}, size={width}x{height}")
+    svg = Element("svg", {
+        "xmlns": "http://www.w3.org/2000/svg",
+        "width": str(width),
+        "height": str(height),
+        "viewBox": f"0 0 {width} {height}",
+    })
 
-    out_path = str(svg_path)
-    Path(os.path.dirname(out_path)).mkdir(parents=True, exist_ok=True)
-
-    svg = ET.Element(
-        "svg",
-        {
-            "xmlns": "http://www.w3.org/2000/svg",
-            "version": "1.1",
-            "width": str(width),
-            "height": str(height),
-            "viewBox": f"0 0 {width} {height}",
-        },
-    )
-
-    # Background (white so preview isn't transparent)
-    ET.SubElement(svg, "rect", {"x": "0", "y": "0", "width": "100%", "height": "100%", "fill": "#ffffff"})
-
-    g = ET.SubElement(svg, "g", {"id": geometry_mode})
+    if background is not None:
+        SubElement(svg, "rect", {
+            "x": "0", "y": "0", "width": str(width), "height": str(height),
+            "fill": _rgb_tuple_to_css(background)
+        })
 
     for shp in shapes:
         t = shp.get("type")
@@ -91,40 +70,33 @@ def write_svg(
             elif "d" in shp:
                 t = "path"
         if t == "rect":
-            ET.SubElement(
-                g, "rect",
-                {
-                    "x": str(shp["x"]), "y": str(shp["y"]),
-                    "width": str(shp["w"]), "height": str(shp["h"]),
-                    "fill": _to_css(shp.get("fill", "#000000")),
-                    "stroke": _to_css(shp.get("stroke", "#000000")),
-                    "stroke-width": str(shp.get("stroke_width", 1)),
-                },
-            )
+            SubElement(svg, "rect", {
+                "x": str(shp["x"]),
+                "y": str(shp["y"]),
+                "width": str(shp["w"]),
+                "height": str(shp["h"]),
+                "fill": _to_css(shp.get("fill", "#000000")),
+                "stroke": _to_css(shp.get("stroke", "#000000")),
+                "stroke-width": str(stroke_width),
+            })
         elif t == "polygon":
-            pts = " ".join(f"{int(x)},{int(y)}" for x, y in shp["points"])
-            ET.SubElement(
-                g, "polygon",
-                {
-                    "points": pts,
-                    "fill": _to_css(shp.get("fill", "#000000")),
-                    "stroke": _to_css(shp.get("stroke", "#000000")),
-                    "stroke-width": str(shp.get("stroke_width", 1)),
-                },
-            )
+            points_attr = " ".join(f"{float(x):.3f},{float(y):.3f}" for x, y in shp["points"])
+            SubElement(svg, "polygon", {
+                "points": points_attr,
+                "fill": _to_css(shp.get("fill", "#000000")),
+                "stroke": _to_css(shp.get("stroke", "#000000")),
+                "stroke-width": str(stroke_width),
+            })
         elif t == "path":
-            ET.SubElement(
-                g, "path",
-                {
-                    "d": shp["d"],
-                    "fill": _to_css(shp.get("fill", "#000000")),
-                    "stroke": _to_css(shp.get("stroke", "#000000")),
-                    "stroke-width": str(shp.get("stroke_width", 1)),
-                },
-            )
+            SubElement(svg, "path", {
+                "d": shp["d"],
+                "fill": _to_css(shp.get("fill", "#000000")),
+                "stroke": _to_css(shp.get("stroke", "#000000")),
+                "stroke-width": str(stroke_width),
+            })
 
     ElementTree(svg).write(svg_path, encoding="utf-8", xml_declaration=True)
-    return out_path
+    return len(shapes)
 
 def write_svg_compat(*, filename=None, shapes=None, geometry=None, layer_name=None, metadata=None,
                      stroke=None, fill_mode=None, use_mask=False, width=None, height=None, **kwargs):
