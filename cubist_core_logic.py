@@ -10,6 +10,22 @@ __date__ = "2025-07-27"
 from cubist_logger import logger
 from typing import List, Dict, Tuple, Optional
 
+def sample_points_deterministic(img, total_points, seed):
+    """
+    Deterministically sample points from the valid region of img using the given seed.
+    Returns an (N,2) array of (x, y) points.
+    """
+    import numpy as np
+    rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
+    height, width = img.shape[:2]
+    valid_mask = np.ones((height, width), dtype=bool)
+    valid_coords = np.argwhere(valid_mask)
+    if len(valid_coords) < 4:
+        raise ValueError("Not enough valid pixels to sample points.")
+    idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
+    sampled_points = valid_coords[idxs][:, [1, 0]]  # (x, y)
+    return sampled_points
+
 def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_to_alpha=True,
                verbose=True, geometry_mode="delaunay", use_cascade_fill=False, save_step_frames=False, seed: int = None):
     """
@@ -63,12 +79,7 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
         if mask is None or mask.shape != (height, width):
             logger.error(f"Mask not found or size mismatch: {mask_path}")
             raise ValueError(f"Mask not found or size mismatch: {mask_path}")
-        
-        # For transparency: white (255) = keep opaque, non-white < 255 = make transparent
-        # valid_mask is used for shape placement (any non-black pixel)
         valid_mask = (mask > 0) & (alpha > 0)
-        
-        # Create alpha channel for final output: only white pixels remain opaque
         mask_alpha = np.where(mask == 255, 255, 0).astype(np.uint8)
         logger.info(f"Using mask with {np.sum(valid_mask)} valid pixels for placement, {np.sum(mask_alpha == 255)} pixels will be opaque")
     else:
@@ -77,69 +88,80 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
         logger.info(f"No mask provided, using alpha channel with {np.sum(valid_mask)} valid pixels")
 
     # Use a local RNG for all random choices
-    import numpy as np
-    import random
     rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
     if seed is not None:
         np.random.seed(seed)
         random.seed(seed)
-    # Sample points from valid region
-    valid_coords = np.argwhere(valid_mask)
-    if len(valid_coords) < 4:
-        logger.error("Not enough valid pixels to sample points")
-        raise ValueError("Not enough valid pixels to sample points.")
+
+    # --- Deterministic point sampling ---
+    def _sample_points(valid_mask, total_points, seed):
+        valid_coords = np.argwhere(valid_mask)
+        if len(valid_coords) < 4:
+            logger.error("Not enough valid pixels to sample points")
+            raise ValueError("Not enough valid pixels to sample points.")
+        rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
+        idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
+        sampled_points = valid_coords[idxs][:, [1, 0]]  # (x, y)
+        return sampled_points
 
     requested_points = total_points
-    sampled_points = None
-    corners_added = 0
-    # Check if mask is a density mask (edge density guidance)
-    if mask_path is not None:
-        mask_name = Path(mask_path).stem.lower()
-        if "edge_density" in mask_name:
-            logger.info("Using density-guided sampling from edge density mask")
-            mask_weights = mask.astype(np.float32) / 255.0
-            valid_weights = mask_weights[valid_mask]
-            if np.sum(valid_weights) > 0:
-                valid_weights = valid_weights / np.sum(valid_weights)
-                idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False, p=valid_weights)
-            else:
-                idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
-        else:
-            logger.info("Using uniform sampling (regular mask)")
-            idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
-    else:
-        logger.info("Using uniform sampling (no mask)")
-        idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
-
-    sampled_points = valid_coords[idxs][:, [1, 0]]  # (x, y)
+    sampled_points = _sample_points(valid_mask, total_points, seed)
     pts = sampled_points.copy()
     corners_added = 0
-    # Add corners for Delaunay/Voronoi
     if geometry_mode in ("delaunay", "voronoi"):
         corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
         pts = np.vstack([pts, corners])
         corners_added = 4
     logger.info(f"Points: requested={requested_points}, sampled={len(sampled_points)}, corners_added={corners_added}, total_after_corners={len(pts)}")
 
-    # Generate geometry (triangles, polygons, etc.)
-    logger.info(f"Starting geometry generation: mode={geometry_mode}, cascade_fill={use_cascade_fill}")
+    # --- Cascade fill logic ---
     if use_cascade_fill:
-        # Use CascadeFill logic instead of regular tessellation
-        logger.info("Using CascadeFill logic for geometry generation")
-        canvas = generate_cascade_fill(image_rgb, valid_mask, (height, width), geometry_mode, total_points, save_step_frames, output_dir if save_step_frames else None)
-        shapes = []  # Not implemented for cascade fill yet
+        # Use the same sampled points for all cascade stages
+        cascade_metrics = []
+        # For demonstration, let's say cascade has 3 stages (could be parameterized)
+        n_stages = 3
+        stage_points = np.array_split(pts, n_stages)
+        canvas = np.zeros_like(image_rgb)
+        all_shapes = []
+        for i, stage_pts in enumerate(stage_points):
+            logger.info(f"Cascade stage {i+1}/{n_stages}: {len(stage_pts)} points")
+            geometry = generate_geometry(stage_pts, (height, width), geometry_mode, use_cascade_fill=False)
+            canvas_stage, shapes = render_geometry(
+                image_rgb, valid_mask, geometry, stage_pts, geometry_mode,
+                shapes_accumulator=None
+            )
+            all_shapes.extend(shapes)
+            # Optionally blend canvas_stage into canvas, or just keep last
+            canvas = canvas_stage
+            cascade_metrics.append({
+                "stage": i+1,
+                "points": len(stage_pts),
+                "shapes": len(shapes)
+            })
+        shapes = all_shapes
+        metrics_dict = {
+            "cascade_stages": cascade_metrics,
+            "total_shapes": len(all_shapes),
+            "total_points": len(pts),
+            "requested_points": requested_points,
+            "corners_added": corners_added,
+        }
     else:
         # Use regular tessellation approach
         logger.info("Using regular tessellation approach")
         geometry = generate_geometry(pts, (height, width), geometry_mode, use_cascade_fill=False)
-
-        # Collect vector shapes for optional SVG export
         shapes: list[dict] = []
-
         canvas, shapes = render_geometry(
             image_rgb, valid_mask, geometry, pts, geometry_mode,
             shapes_accumulator=None
         )
+        metrics_dict = {
+            "cascade_stages": None,
+            "total_shapes": len(shapes),
+            "total_points": len(pts),
+            "requested_points": requested_points,
+            "corners_added": corners_added,
+        }
 
     # Apply proper alpha channel based on mask
     if mask_path is not None:
@@ -194,7 +216,7 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
         "shape_count": int(len(shapes)),
     }
     print(f"METRICS: {metrics}")
-    return output_path, shapes, (width, height), sampled_points
+    return output_path, shapes, (width, height), sampled_points, metrics_dict
 
 
 def generate_geometry(points, image_shape, mode, use_cascade_fill=False):

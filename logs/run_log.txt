@@ -4978,3 +4978,93 @@ endering for voronoi
 2025-08-18 16:59:45,074 INFO PNG created: output\your_input_image_00100pts_voronoi_regular_20250818_165944.png
 2025-08-18 16:59:45,074 INFO SVG created: output\your_input_image_00100_voronoi_20250818_165945.svg
 2025-08-18 16:59:45,075 INFO Test completed successfully in 4.89s: output\your_input_image_00100pts_voronoi_regular_20250818_165944.png
+[test_cli] logger initialized
+2025-08-18 19:25:25,273 INFO Python executable: G:\My Drive\Code\Python\cubist_art\.venv\Scripts\python.exe
+2025-08-18 19:25:25,279 INFO Working directory: G:\My Drive\Code\Python\cubist_art
+2025-08-18 19:25:25,281 INFO Parsed args: Namespace(input='input/your_input_image.jpg', output='output', mask=None, run_all_tests=False, mask_only_tests=False, geometry=None, cascade_fill=None, points=1000, step_frames=False, archive_output=False, archive=True, quiet=False, export_svg=False, timeout_seconds=300, triple_test=False, seed=None)
+[test_cli] logger initialized
+2025-08-18 19:25:25,865 INFO Python executable: G:\My Drive\Code\Python\cubist_art\.venv\Scripts\python.exe
+2025-08-18 19:25:25,871 INFO Working directory: G:\My Drive\Code\Python\cubist_art
+2025-08-18 19:25:25,873 INFO Parsed args: Namespace(input='input/your_input_image.jpg', output='output', mask=None, run_all_tests=False, mask_only_tests=False, geometry=None, cascade_fill=None, points=100, step_frames=False, archive_output=False, archive=True, quiet=False, export_svg=True, timeout_seconds=120, triple_test=True, seed=42)
+2025-08-18 19:25:35,837 INFO Archived 6 files to: output\_archive\20250818_192525 and zipped to output\_archive\20250818_192525.zip
+2025-08-18 19:25:35,844 INFO run_single_test() ENTRY: mode=rectangles, cascade=False, points=100
+2025-08-18 19:25:35,845 INFO Starting test: rectangles
+2025-08-18 19:25:35,845 INFO run_cubist_cli() ENTRY: mode=rectangles, cascade=False, points=100
+2025-08-18 19:25:35,846 INFO Running CLI command: python cubist_cli.py --input input/your_input_image.jpg --output output --geometry rectangles --cascade_fill False --points 100 --timeout-seconds 120 --export-svg --verbose --seed 42
+2025-08-18 19:25:35,848 INFO Subprocess start time: 2025-08-18 19:25:35
+2025-08-18 19:25:35,849 INFO Timeout seconds: 120
+[2025-08-18 19:25:37,505] INFO: run_cubist() ENTRY: mode=rectangles, cascade_fill=False, points=100
+[2025-08-18 19:25:37,676] INFO: Created output directory: output
+[2025-08-18 19:25:37,676] INFO: Loading input image: input/your_input_image.jpg
+[2025-08-18 19:25:38,144] INFO: Loaded RGB image: (4032, 3024, 3)
+[2025-08-18 19:25:38,153] INFO: No mask provided, using alpha channel with 12192768 valid pixels
+[2025-08-18 19:25:38,244] INFO: Using uniform sampling (no mask)
+[2025-08-18 19:25:38,249] INFO: Points: requested=100, sampled=100, corners_added=0, total_after_corners=100
+[2025-08-18 19:25:38,250] INFO: Starting geometry generation: mode=rectangles, cascade_fill=False
+[2025-08-18 19:25:38,251] INFO: Using regular tessellation approach
+[2025-08-18 19:25:38,251] INFO: generate_geometry() ENTRY: mode=rectangles, points=100
+[2025-08-18 19:25:41,120] INFO: Rectangle mode - no geometry object needed
+[2025-08-18 19:25:41,121] INFO: render_geometry() ENTRY: mode=rectangles
+[2025-08-18 19:25:41,128] INFO: Rendering grid rectangles
+[2025-08-18 19:25:41,129] INFO: Grid size: 9x9, rectangle size: 336x448
+[2025-08-18 19:25:43,591] INFO: Rendered 81 grid rectangles
+[2025-08-18 19:25:43,593] INFO: render_geometry() EXIT: Completed rendering for rectangles
+[2025-08-18 19:25:43,656] INFO: Saving output to: output\your_input_image_00100pts_rectangles_regular_20250818_192543.png
+[2025-08-18 19:25:43,763] INFO: run_cubist() EXIT: Successfully saved output\your_input_image_00100pts_rectangles_regular_20250818_192543.png
+2025-08-18 19:25:43,841 INFO PNG created: output\your_input_image_00100pts_rectangles_regular_20250818_192543.png
+2025-08-18 19:25:43,842 INFO SVG created: output\your_input_image_00100_rectangles_20250818_192543.svg
+2025-08-18 19:25:43,845 INFO Test completed successfully in 8.00s: output\your_input_image_00100pts_rectangles_regular_20250818_192543.png
+2025-08-18 19:25:43,848 INFO run_single_test() ENTRY: mode=delaunay, cascade=False, points=100
+2025-08-18 19:25:43,849 INFO Starting test: delaunay
+2025-08-18 19:25:43,849 INFO run_cubist_cli() ENTRY: mode=delaunay, cascade=False, points=100
+2025-08-18 19:25:43,850 INFO Running CLI command: python cubist_cli.py --input input/your_input_image.jpg --output output --geometry delaunay --cascade_fill False --points 100 --timeout-seconds 120 --export-svg --verbose --seed 42
+2025-08-18 19:25:43,851 INFO Subprocess start time: 2025-08-18 19:25:43
+2025-08-18 19:25:43,851 INFO Timeout seconds: 120
+[2025-08-18 19:25:44,301] INFO: run_cubist() ENTRY: mode=delaunay, cascade_fill=False, points=100
+[2025-08-18 19:25:44,341] INFO: Created output directory: output
+[2025-08-18 19:25:44,341] INFO: Loading input image: input/your_input_image.jpg
+[2025-08-18 19:25:44,722] INFO: Loaded RGB image: (4032, 3024, 3)
+[2025-08-18 19:25:44,731] INFO: No mask provided, using alpha channel with 12192768 valid pixels
+[2025-08-18 19:25:44,847] INFO: Using uniform sampling (no mask)
+[2025-08-18 19:25:44,848] INFO: Points: requested=100, sampled=100, corners_added=4, total_after_corners=104
+[2025-08-18 19:25:44,849] INFO: Starting geometry generation: mode=delaunay, cascade_fill=False
+[2025-08-18 19:25:44,850] INFO: Using regular tessellation approach
+[2025-08-18 19:25:44,850] INFO: generate_geometry() ENTRY: mode=delaunay, points=104
+[2025-08-18 19:25:45,261] INFO: Creating Delaunay triangulation
+[2025-08-18 19:25:45,288] INFO: Created Delaunay with 202 triangles
+[2025-08-18 19:25:45,289] INFO: render_geometry() ENTRY: mode=delaunay
+[2025-08-18 19:25:45,297] INFO: Rendering Delaunay triangles: 202 triangles
+[2025-08-18 19:25:51,408] INFO: Rendered 202 Delaunay triangles
+[2025-08-18 19:25:51,410] INFO: render_geometry() EXIT: Completed rendering for delaunay
+[2025-08-18 19:25:51,459] INFO: Saving output to: output\your_input_image_00100pts_delaunay_regular_20250818_192551.png
+[2025-08-18 19:25:51,593] INFO: run_cubist() EXIT: Successfully saved output\your_input_image_00100pts_delaunay_regular_20250818_192551.png
+2025-08-18 19:25:51,674 INFO PNG created: output\your_input_image_00100pts_delaunay_regular_20250818_192551.png
+2025-08-18 19:25:51,675 INFO SVG created: output\your_input_image_00100_delaunay_20250818_192551.svg
+2025-08-18 19:25:51,678 INFO Test completed successfully in 7.83s: output\your_input_image_00100pts_delaunay_regular_20250818_192551.png
+2025-08-18 19:25:51,679 INFO run_single_test() ENTRY: mode=voronoi, cascade=False, points=100
+2025-08-18 19:25:51,680 INFO Starting test: voronoi
+2025-08-18 19:25:51,680 INFO run_cubist_cli() ENTRY: mode=voronoi, cascade=False, points=100
+2025-08-18 19:25:51,681 INFO Running CLI command: python cubist_cli.py --input input/your_input_image.jpg --output output --geometry voronoi --cascade_fill False --points 100 --timeout-seconds 120 --export-svg --verbose --seed 42
+2025-08-18 19:25:51,682 INFO Subprocess start time: 2025-08-18 19:25:51
+2025-08-18 19:25:51,683 INFO Timeout seconds: 120
+[2025-08-18 19:25:52,129] INFO: run_cubist() ENTRY: mode=voronoi, cascade_fill=False, points=100
+[2025-08-18 19:25:52,172] INFO: Created output directory: output
+[2025-08-18 19:25:52,173] INFO: Loading input image: input/your_input_image.jpg
+[2025-08-18 19:25:52,672] INFO: Loaded RGB image: (4032, 3024, 3)
+[2025-08-18 19:25:52,680] INFO: No mask provided, using alpha channel with 12192768 valid pixels
+[2025-08-18 19:25:52,775] INFO: Using uniform sampling (no mask)
+[2025-08-18 19:25:52,776] INFO: Points: requested=100, sampled=100, corners_added=4, total_after_corners=104
+[2025-08-18 19:25:52,777] INFO: Starting geometry generation: mode=voronoi, cascade_fill=False
+[2025-08-18 19:25:52,778] INFO: Using regular tessellation approach
+[2025-08-18 19:25:52,779] INFO: generate_geometry() ENTRY: mode=voronoi, points=104
+[2025-08-18 19:25:53,159] INFO: Creating Voronoi diagram
+[2025-08-18 19:25:53,161] INFO: Created Voronoi with 202 vertices
+[2025-08-18 19:25:53,162] INFO: render_geometry() ENTRY: mode=voronoi
+[2025-08-18 19:25:53,169] INFO: Rendering Voronoi polygons
+[2025-08-18 19:25:56,255] INFO: Rendered 100 Voronoi polygons
+[2025-08-18 19:25:56,258] INFO: render_geometry() EXIT: Completed rendering for voronoi
+[2025-08-18 19:25:56,311] INFO: Saving output to: output\your_input_image_00100pts_voronoi_regular_20250818_192556.png
+[2025-08-18 19:25:56,452] INFO: run_cubist() EXIT: Successfully saved output\your_input_image_00100pts_voronoi_regular_20250818_192556.png
+2025-08-18 19:25:56,558 INFO PNG created: output\your_input_image_00100pts_voronoi_regular_20250818_192556.png
+2025-08-18 19:25:56,574 INFO SVG created: output\your_input_image_00100_voronoi_20250818_192556.svg
+2025-08-18 19:25:56,578 INFO Test completed successfully in 4.90s: output\your_input_image_00100pts_voronoi_regular_20250818_192556.png

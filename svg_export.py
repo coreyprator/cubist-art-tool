@@ -125,3 +125,40 @@ def write_svg(
 
     ElementTree(svg).write(svg_path, encoding="utf-8", xml_declaration=True)
     return out_path
+
+def write_svg_compat(*, filename=None, shapes=None, geometry=None, layer_name=None, metadata=None,
+                     stroke=None, fill_mode=None, use_mask=False, width=None, height=None, **kwargs):
+    """
+    Backwards compatible entrypoint used by older tests.
+    Maps old keyword names to the current write_svg signature.
+    """
+    if filename is None:
+        raise ValueError("filename is required")
+    if shapes is None:
+        shapes = []
+    # Fallback width/height if not provided
+    if width is None:
+        width = 1024
+    if height is None:
+        height = 1024
+    # Prepare stroke/palette options
+    palette = None
+    stroke_opts = {"color": stroke, "width": 1, "alpha": 1.0} if stroke else None
+    return write_svg(
+        svg_path=str(filename),
+        shapes=shapes,
+        width=width,
+        height=height,
+        geometry_mode=geometry or "delaunay",
+        palette=palette,
+        stroke=stroke_opts,
+    )
+
+# Keep old name alive for tests that import write_svg directly
+# by providing a thin proxy that detects the call pattern:
+_original_write_svg = write_svg
+
+def write_svg(*args, **kwargs):
+    if "filename" in kwargs or "geometry" in kwargs or "layer_name" in kwargs:
+        return write_svg_compat(**kwargs)
+    return _original_write_svg(*args, **kwargs)

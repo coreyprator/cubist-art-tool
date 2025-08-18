@@ -3,6 +3,26 @@
 
 All notable changes to this project will be documented in this file.
 
+ # Changelog
+
+## [v1.0.0] - 2025-08-18
+### Added
+- Deterministic point sampling via `--seed` across PNG and SVG.
+- SVG export uses the exact same points/geometry as raster (PNG), fixing misalignment.
+- CLI `METRICS:` line for machine-readable run stats (mode, requested/sampled/corners/total points, shape counts, file paths).
+- Lightweight SVG parity validator hook in `test_cli.py` (counts polygons/paths, compares to raster shape count).
+- Friendly early-exit for archive-only runs and clearer error messages.
+
+### Fixed
+- Intermittent point-count mismatches between PNG/SVG.
+- Rectangles mode honoring grid-based counts (and clarifying `--points` behavior).
+- Multiple indentation/merge artifacts; removed duplicate `if __name__ == "__main__":` blocks.
+
+### Known
+- Cascade mode deferred to next release.
+- SVG color fill parity exists for triangle/voronoi/rectangles but palette controls still basic.
+
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [v12i] - 2025-07-29

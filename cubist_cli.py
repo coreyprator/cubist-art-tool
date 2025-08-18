@@ -5,6 +5,9 @@ import logging
 import traceback
 import random
 from svg_export import write_svg, count_svg_shapes
+import json
+import hashlib
+import datetime
 
 # Logging setup: try to use centralized logger, else fallback to basicConfig
 try:
@@ -35,6 +38,8 @@ def main():
     parser.add_argument('--timeout-seconds', type=int, default=300, help='Timeout in seconds for the run (default 300)')
     parser.add_argument('--seed', type=int, default=None, help='Seed for RNG so PNG and SVG use identical sampled points/colors')
     parser.add_argument('--svg-limit', type=int, default=None, help='Optional: cap number of shapes written to SVG (default: no cap)')
+    parser.add_argument('--metrics-json', type=str, default=None, help='Write run metrics to this JSON file')
+    parser.add_argument('--archive-manifest', type=str, default=None, help='Write archive manifest JSON to this file')
     args = parser.parse_args()
 
     logger.info(f"cubist_cli.py ENTRY with args: {args}")
@@ -175,6 +180,58 @@ def main():
         f"svg={final_svg_path or 'None'}",
         flush=True
     )
+
+    # --- JSON metrics and archive manifest ---
+    def _sha256(p):
+        try:
+            with open(p, 'rb') as f:
+                h = hashlib.sha256()
+                for chunk in iter(lambda: f.read(65536), b""):
+                    h.update(chunk)
+                return h.hexdigest()
+        except Exception:
+            return None
+
+    svg_count = None
+    if final_svg_path and os.path.exists(final_svg_path):
+        try:
+            svg_count = count_svg_shapes(final_svg_path)
+        except Exception:
+            svg_count = None
+
+    metrics_obj = {
+        "geometry_mode": geometry_mode,
+        "points": args.points,
+        "svg_shape_count": svg_count if final_svg_path else None,
+        "seed": args.seed,
+        "cascade": args.cascade_fill,
+        "output_png": final_png_path,
+        "output_svg": final_svg_path,
+    }
+
+    if args.metrics_json:
+        with open(args.metrics_json, "w", encoding="utf-8") as f:
+            json.dump(metrics_obj, f, indent=2)
+        print(f"[metrics] Wrote metrics JSON: {args.metrics_json}")
+
+    if args.archive_manifest:
+        from datetime import datetime as _dt
+        manifest = {
+            "input": {
+                "path": args.input,
+                "sha256": _sha256(args.input)
+            },
+            "outputs": [
+                {"path": final_png_path, "sha256": _sha256(final_png_path)},
+                {"path": final_svg_path, "sha256": _sha256(final_svg_path)} if final_svg_path else None
+            ],
+            "argv": sys.argv,
+            "timestamp": _dt.now().isoformat()
+        }
+        manifest["outputs"] = [x for x in manifest["outputs"] if x]
+        with open(args.archive_manifest, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+        print(f"[archive] Wrote archive manifest: {args.archive_manifest}")
 
     print(f"PNG_PATH:{final_png}")
     if svg_path:
