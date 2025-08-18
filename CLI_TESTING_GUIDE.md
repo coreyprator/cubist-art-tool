@@ -212,6 +212,24 @@ launch_vscode.bat
 
 ---
 
+## Option 4: SVG Export (`--export-svg`)
+
+You can export SVG files for any geometry mode using the `--export-svg` flag.
+
+**Usage:**
+```
+python main.py --geometry delaunay --export-svg
+```
+
+**Behavior:**
+- Exports an SVG file alongside PNG output.
+- SVG includes layers/groups, optional mask placeholder, and metadata (geometry, cascade, points).
+- Compatible with Adobe Illustrator.
+
+**Tips:**
+- Use the SVG in vector editors for further editing.
+- Mask placeholder can be used for advanced compositing.
+
 ## 🎉 Ready to Test!
 
 Choose your preferred method:
