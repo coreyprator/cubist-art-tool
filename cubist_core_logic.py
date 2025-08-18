@@ -8,8 +8,10 @@ __date__ = "2025-07-27"
 
 # Import logging
 from cubist_logger import logger
+from typing import List, Dict, Tuple, Optional
 
-def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_to_alpha=True, verbose=True, geometry_mode="delaunay", use_cascade_fill=False, save_step_frames=False):
+def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_to_alpha=True,
+               verbose=True, geometry_mode="delaunay", use_cascade_fill=False, save_step_frames=False, seed: int = None):
     """
     Generate a cubist-style image using the specified geometry mode.
 
@@ -31,6 +33,7 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
     
     import cv2
     import numpy as np
+    import random
     from pathlib import Path
     import os
 
@@ -73,43 +76,50 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
         mask_alpha = None
         logger.info(f"No mask provided, using alpha channel with {np.sum(valid_mask)} valid pixels")
 
+    # Use a local RNG for all random choices
+    import numpy as np
+    import random
+    rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
+    if seed is not None:
+        np.random.seed(seed)
+        random.seed(seed)
     # Sample points from valid region
     valid_coords = np.argwhere(valid_mask)
     if len(valid_coords) < 4:
         logger.error("Not enough valid pixels to sample points")
         raise ValueError("Not enough valid pixels to sample points.")
 
+    requested_points = total_points
+    sampled_points = None
+    corners_added = 0
     # Check if mask is a density mask (edge density guidance)
     if mask_path is not None:
         mask_name = Path(mask_path).stem.lower()
         if "edge_density" in mask_name:
             logger.info("Using density-guided sampling from edge density mask")
-            # For density masks: use mask values as sampling weights
             mask_weights = mask.astype(np.float32) / 255.0
-            # Normalize weights so higher values = more likely to be sampled
             valid_weights = mask_weights[valid_mask]
             if np.sum(valid_weights) > 0:
                 valid_weights = valid_weights / np.sum(valid_weights)
-                idxs = np.random.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), 
-                                  replace=False, p=valid_weights)
+                idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False, p=valid_weights)
             else:
-                # Fallback to uniform sampling if weights are all zero
-                idxs = np.random.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
+                idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
         else:
             logger.info("Using uniform sampling (regular mask)")
-            # Regular transparency mask: uniform sampling
-            idxs = np.random.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
+            idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
     else:
         logger.info("Using uniform sampling (no mask)")
-        idxs = np.random.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
+        idxs = rng.choice(valid_coords.shape[0], min(total_points, len(valid_coords)), replace=False)
 
-    pts = valid_coords[idxs][:, [1, 0]]  # (x, y)
-    logger.info(f"Sampled {len(pts)} points from valid region")
-
-    # Add corners
-    corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
-    pts = np.vstack([pts, corners])
-    logger.info(f"Added corners, total points: {len(pts)}")
+    sampled_points = valid_coords[idxs][:, [1, 0]]  # (x, y)
+    pts = sampled_points.copy()
+    corners_added = 0
+    # Add corners for Delaunay/Voronoi
+    if geometry_mode in ("delaunay", "voronoi"):
+        corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
+        pts = np.vstack([pts, corners])
+        corners_added = 4
+    logger.info(f"Points: requested={requested_points}, sampled={len(sampled_points)}, corners_added={corners_added}, total_after_corners={len(pts)}")
 
     # Generate geometry (triangles, polygons, etc.)
     logger.info(f"Starting geometry generation: mode={geometry_mode}, cascade_fill={use_cascade_fill}")
@@ -117,11 +127,19 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
         # Use CascadeFill logic instead of regular tessellation
         logger.info("Using CascadeFill logic for geometry generation")
         canvas = generate_cascade_fill(image_rgb, valid_mask, (height, width), geometry_mode, total_points, save_step_frames, output_dir if save_step_frames else None)
+        shapes = []  # Not implemented for cascade fill yet
     else:
         # Use regular tessellation approach
         logger.info("Using regular tessellation approach")
         geometry = generate_geometry(pts, (height, width), geometry_mode, use_cascade_fill=False)
-        canvas = render_geometry(image_rgb, valid_mask, geometry, pts, geometry_mode)
+
+        # Collect vector shapes for optional SVG export
+        shapes: list[dict] = []
+
+        canvas, shapes = render_geometry(
+            image_rgb, valid_mask, geometry, pts, geometry_mode,
+            shapes_accumulator=None
+        )
 
     # Apply proper alpha channel based on mask
     if mask_path is not None:
@@ -164,7 +182,19 @@ def run_cubist(input_path, output_dir, mask_path=None, total_points=1000, clip_t
     if verbose:
         print(f"Saved: {os.path.abspath(str(output_path))}")
     logger.info(f"run_cubist() EXIT: Successfully saved {output_path}")
-    return str(output_path)
+    final_png_path = output_path  # or whatever variable holds the PNG path
+    # Save PNG as before...
+    # SVG export (when a path was supplied)
+    # (SVG writing is now handled in cubist_cli.py, not here)
+    # Emit a METRICS line for the validator
+    metrics = {
+        "geometry": geometry_mode,
+        "requested_points": int(requested_points),
+        "total_points_after_corners": int(len(pts)),
+        "shape_count": int(len(shapes)),
+    }
+    print(f"METRICS: {metrics}")
+    return output_path, shapes, (width, height), sampled_points
 
 
 def generate_geometry(points, image_shape, mode, use_cascade_fill=False):
@@ -201,7 +231,7 @@ def generate_geometry(points, image_shape, mode, use_cascade_fill=False):
         raise ValueError(f"Unsupported geometry mode: {mode}")
 
 
-def render_geometry(image_rgb, valid_mask, geometry, points, mode):
+def render_geometry(image_rgb, valid_mask, geometry, pts, mode, shapes_accumulator=None):
     """
     Render geometry shapes onto a canvas using the original tessellation approach.
     
@@ -209,7 +239,7 @@ def render_geometry(image_rgb, valid_mask, geometry, points, mode):
         image_rgb (np.ndarray): Source image in RGB format.
         valid_mask (np.ndarray): Boolean mask of valid pixels.
         geometry: Geometry object from generate_geometry().
-        points (np.ndarray): Array of (x, y) points.
+        pts (np.ndarray): Array of (x, y) points.
         mode (str): Geometry mode ('delaunay', 'voronoi', 'rectangles').
     
     Returns:
@@ -221,12 +251,13 @@ def render_geometry(image_rgb, valid_mask, geometry, points, mode):
     
     height, width = image_rgb.shape[:2]
     canvas = np.zeros_like(image_rgb)
-    
+    shapes = []
     if mode == "delaunay":
         logger.info(f"Rendering Delaunay triangles: {len(geometry.simplices)} triangles")
         rendered_count = 0
         for simplex in geometry.simplices:
-            tri_pts = points[simplex].astype(np.int32)
+            tri_pts = pts[simplex].astype(np.int32)
+            tri_pts = np.clip(tri_pts, 0, np.array([width-1, height-1])).reshape(-1, 2)
             mask_tri = np.zeros((height, width), dtype=np.uint8)
             cv2.fillConvexPoly(mask_tri, tri_pts, 1)
             mask_tri = np.logical_and(mask_tri == 1, valid_mask)
@@ -235,8 +266,25 @@ def render_geometry(image_rgb, valid_mask, geometry, points, mode):
             mean_color = [int(np.mean(image_rgb[:, :, c][mask_tri])) for c in range(3)]
             rendered_count += 1
             canvas[mask_tri] = mean_color
+            # Add to shapes
+            shapes.append({
+                "type": "polygon",
+                "points": [(int(tri_pts[0][0]), int(tri_pts[0][1])),
+                           (int(tri_pts[1][0]), int(tri_pts[1][1])),
+                           (int(tri_pts[2][0]), int(tri_pts[2][1]))],
+                "fill": tuple(mean_color)
+            })
+            if shapes_accumulator is not None:
+                shapes_accumulator.append({
+                    "type": "polygon",
+                    "points": [(int(tri_pts[0][0]), int(tri_pts[0][1])),
+                               (int(tri_pts[1][0]), int(tri_pts[1][1])),
+                               (int(tri_pts[2][0]), int(tri_pts[2][1]))],
+                    "fill": "none",
+                    "stroke": "#000000",
+                    "stroke_width": 1,
+                })
         logger.info(f"Rendered {rendered_count} Delaunay triangles")
-    
     elif mode == "voronoi":
         logger.info("Rendering Voronoi polygons")
         rendered_count = 0
@@ -255,14 +303,26 @@ def render_geometry(image_rgb, valid_mask, geometry, points, mode):
             mean_color = [int(np.mean(image_rgb[:, :, c][mask_poly])) for c in range(3)]
             canvas[mask_poly] = mean_color
             rendered_count += 1
+            # Add to shapes
+            shapes.append({
+                "type": "polygon",
+                "points": [(int(px), int(py)) for (px, py) in polygon],
+                "fill": tuple(mean_color)
+            })
+            if shapes_accumulator is not None:
+                shapes_accumulator.append({
+                    "type": "polygon",
+                    "points": [(int(px), int(py)) for (px, py) in polygon],
+                    "fill": "none",
+                    "stroke": "#000000",
+                    "stroke_width": 1,
+                })
         logger.info(f"Rendered {rendered_count} Voronoi polygons")
-    
     elif mode == "rectangles":
         logger.info("Rendering grid rectangles")
         rendered_count = 0
-        # Divide the image into a grid of rectangles, each colored by the mean color of its region
-        total_points = len(points) - 4  # Subtract the 4 corner points
-        grid_size = int(np.sqrt(total_points))
+        total_points = max(0, len(pts) - 4)  # Subtract the 4 corner points
+        grid_size = max(1, int(np.sqrt(total_points)))
         rect_h = max(1, height // grid_size)
         rect_w = max(1, width // grid_size)
         logger.info(f"Grid size: {grid_size}x{grid_size}, rectangle size: {rect_w}x{rect_h}")
@@ -280,13 +340,30 @@ def render_geometry(image_rgb, valid_mask, geometry, points, mode):
                 mean_color = [int(np.mean(image_rgb[:, :, c][region_mask])) for c in range(3)]
                 rendered_count += 1
                 canvas[region_mask] = mean_color
+                # Add to shapes
+                shapes.append({
+                    "type": "rect",
+                    "x": int(x0), "y": int(y0),
+                    "w": int(x1 - x0), "h": int(y1 - y0),
+                    "fill": tuple(mean_color)
+                })
+                if shapes_accumulator is not None:
+                    w = int(x1 - x0)
+                    h = int(y1 - y0)
+                    shapes_accumulator.append({
+                        "type": "rect",
+                        "x": int(x0), "y": int(y0),
+                        "w": w,  "h": h,
+                        "fill": "#ffffff",
+                        "stroke": "#000000",
+                        "stroke_width": 1,
+                    })
         logger.info(f"Rendered {rendered_count} grid rectangles")
     else:
         logger.error(f"Unsupported geometry mode: {mode}")
         raise ValueError(f"Unsupported geometry mode: {mode}")
-    
     logger.info(f"render_geometry() EXIT: Completed rendering for {mode}")
-    return canvas
+    return canvas, shapes
 
 
 def generate_cascade_fill(image_rgb, valid_mask, image_shape, mode, total_points, save_step_frames=False, output_dir=None):
@@ -619,20 +696,19 @@ def find_optimal_placement(available_mask, occupied_mask, shape_size, mode, is_f
     if len(best_locations) == 0:
         # Fallback to any positive priority location
         best_locations = np.argwhere(priority_map > 0)
-    
     # Randomly select one of the best locations
-    selected_idx = np.random.randint(0, len(best_locations))
-    center_y, center_x = best_locations[selected_idx]
+    idx = np.random.choice(len(best_locations))
+    center_y, center_x = best_locations[idx]
     
     selection_time = time.perf_counter() - selection_start
-    logger.info(f"Optimal placement found at ({center_x}, {center_y}), selection time: {selection_time:.3f}s")
+    logger.info(f"Optimal placement found: ({center_x}, {center_y}), selection time: {selection_time:.3f}s")
     
     return int(center_x), int(center_y)
 
 
 def generate_shape_mask(center_x, center_y, size, mode, image_shape, available_mask, occupied_mask):
     """
-    Generate a mask for the shape to be placed, based on the desired mode.
+    Generate a mask for the shape to be placed, based on the desired geometry mode.
     
     Args:
         center_x (int): X-coordinate of the shape center.
@@ -644,76 +720,107 @@ def generate_shape_mask(center_x, center_y, size, mode, image_shape, available_m
         occupied_mask (np.ndarray): Boolean mask of occupied pixels.
     
     Returns:
-        np.ndarray: Boolean mask of the shape area.
+        np.ndarray: Boolean mask of the shape area, or None if shape could not be generated.
     """
-    import numpy as np
     import cv2
+    import numpy as np
     
     height, width = image_shape
     
     if mode == "delaunay":
         logger.info(f"Generating Delaunay mask at ({center_x}, {center_y}), size {size}")
-        # For Delaunay, generate a triangular mask around the center
-        triangle_mask = np.zeros((height, width), dtype=bool)
-        
-        # Create a random triangle around the center
-        pts = np.array([[center_x, center_y], 
-                        [center_x + size * np.cos(2*np.pi/3), center_y + size * np.sin(2*np.pi/3)],
-                        [center_x + size * np.cos(4*np.pi/3), center_y + size * np.sin(4*np.pi/3)]])
-        pts = pts.astype(np.int32)
-        
-        cv2.fillConvexPoly(triangle_mask, pts, 1)
-        
-        # Ensure the mask is within bounds
-        triangle_mask = np.clip(triangle_mask, 0, 1)
-        
-        # Combine with available mask
-        final_mask = triangle_mask & available_mask
-        
-        return final_mask.astype(bool)
-    
+        # For Delaunay, generate a triangle around the center point
+        # Randomly perturb the triangle vertices for variability
+        perturb = size // 4
+        pts = np.array([
+            [center_x, center_y - size],
+            [center_x - size + np.random.randint(-perturb, perturb), center_y + size],
+            [center_x + size - np.random.randint(-perturb, perturb), center_y + size]
+        ], dtype=np.int32)
+        mask = np.zeros((height, width), dtype=np.uint8)
+        cv2.fillConvexPoly(mask, pts, 1)
+        # Safety: mask is uint8, convert to bool for logic
+        mask = mask.astype(bool)
+        # Ensure the mask is valid
+        if np.sum(mask) < 10:
+            logger.warning("Generated Delaunay mask is too small, skipping")
+            return None
+        return mask
     elif mode == "voronoi":
         logger.info(f"Generating Voronoi mask at ({center_x}, {center_y}), size {size}")
-        # For Voronoi, generate a polygonal mask around the center
-        polygon_mask = np.zeros((height, width), dtype=bool)
-        
-        # Create a random polygon (e.g., hexagon) around the center
-        num_vertices = 6
-        angle_step = 2 * np.pi / num_vertices
-        pts = np.array([[center_x + size * np.cos(i * angle_step), 
-                          center_y + size * np.sin(i * angle_step)] for i in range(num_vertices)])
-        pts = pts.astype(np.int32)
-        
-        cv2.fillConvexPoly(polygon_mask, pts, 1)
-        
-        # Ensure the mask is within bounds
-        polygon_mask = np.clip(polygon_mask, 0, 1)
-        
-        # Combine with available mask
-        final_mask = polygon_mask & available_mask
-        
-        return final_mask.astype(bool)
-    
+        # For Voronoi, generate a polygonal region around the center point
+        num_vertices = np.random.randint(3, 8)
+        angle_steps = np.linspace(0, 2 * np.pi, num_vertices, endpoint=False) + np.random.uniform(0, 2 * np.pi / num_vertices)
+        radius = size * np.random.uniform(0.5, 1.0, num_vertices)
+        pts = np.array([[center_x + int(r * np.cos(a)), center_y + int(r * np.sin(a))] for r, a in zip(radius, angle_steps)], dtype=np.int32)
+        mask = np.zeros((height, width), dtype=np.uint8)
+        cv2.fillPoly(mask, [pts], 1)
+        # Safety: mask is uint8, convert to bool for logic
+        mask = mask.astype(bool)
+        # Ensure the mask is valid
+        if np.sum(mask) < 10:
+            logger.warning("Generated Voronoi mask is too small, skipping")
+            return None
+        return mask
     elif mode == "rectangles":
         logger.info(f"Generating rectangular mask at ({center_x}, {center_y}), size {size}")
-        # For rectangles, simply create a square mask
-        rect_mask = np.zeros((height, width), dtype=bool)
-        
-        x0 = max(0, center_x - size // 2)
-        x1 = min(width, center_x + size // 2)
-        y0 = max(0, center_y - size // 2)
-        y1 = min(height, center_y + size // 2)
-        
-        rect_mask[y0:y1, x0:x1] = 1
-        
-        # Ensure the mask is within bounds
-        rect_mask = np.clip(rect_mask, 0, 1)
-        
-        # Combine with available mask
-        final_mask = rect_mask & available_mask
-        
-        return final_mask.astype(bool)
-    
+        # For rectangles, just use a square around the center
+        half_size = size // 2
+        x0 = max(center_x - half_size, 0)
+        x1 = min(center_x + half_size, width)
+        y0 = max(center_y - half_size, 0)
+        y1 = min(center_y + half_size, height)
+        mask = np.zeros((height, width), dtype=bool)
+        mask[y0:y1, x0:x1] = True
+        # Ensure the mask is valid
+        if np.sum(mask) < 10:
+            logger.warning("Generated rectangular mask is too small, skipping")
+            return None
+        return mask
     else:
         logger.error(f"Unsupported geometry mode for mask generation: {mode}")
         return None
+
+# Ensure all OpenCV drawing calls use uint8, not bool
+def safe_fillConvexPoly(img, pts, color, *args, **kwargs):
+    if img.dtype == np.bool_:
+        logging.debug("Converting mask to uint8 for OpenCV draw (fillConvexPoly)")
+        img = img.astype(np.uint8) * 255
+    return cv2.fillConvexPoly(img, pts, color, *args, **kwargs)
+
+def safe_rectangle(img, pt1, pt2, color, *args, **kwargs):
+    if img.dtype == np.bool_:
+        logging.debug("Converting mask to uint8 for OpenCV draw (rectangle)")
+        img = img.astype(np.uint8) * 255
+    return cv2.rectangle(img, pt1, pt2, color, *args, **kwargs)
+
+def safe_circle(img, center, radius, color, *args, **kwargs):
+    if img.dtype == np.bool_:
+        logging.debug("Converting mask to uint8 for OpenCV draw (circle)")
+        img = img.astype(np.uint8) * 255
+    return cv2.circle(img, center, radius, color, *args, **kwargs)
+
+def safe_polylines(img, pts, isClosed, color, *args, **kwargs):
+    if img.dtype == np.bool_:
+        logging.debug("Converting mask to uint8 for OpenCV draw (polylines)")
+        img = img.astype(np.uint8) * 255
+    return cv2.polylines(img, pts, isClosed, color, *args, **kwargs)
+
+def safe_drawContours(img, contours, contourIdx, color, *args, **kwargs):
+    if img.dtype == np.bool_:
+        logging.debug("Converting mask to uint8 for OpenCV draw (drawContours)")
+        img = img.astype(np.uint8) * 255
+    return cv2.drawContours(img, contours, contourIdx, color, *args, **kwargs)
+
+# Utility: ensure mask/canvas is uint8 for OpenCV
+def ensure_uint8_mask(mask, logger=None):
+    if mask.dtype == np.bool_:
+        if logger:
+            logger.debug("Converting mask/canvas to uint8 for OpenCV")
+        return (mask.astype(np.uint8) * 255)
+    return mask
+
+# Patch all uses in cascade fill and shape rasterization
+# Example: in generate_cascade_fill or similar, replace cv2.fillConvexPoly(mask, ...) with cv2.fillConvexPoly(ensure_uint8_mask(mask, logger), ...)
+# If you find mask = np.zeros(...) with dtype=bool, change to dtype=np.uint8
+# If you find mask = np.zeros(...) with dtype=bool, change to dtype=np.uint8

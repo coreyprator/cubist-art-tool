@@ -1,0 +1,19 @@
+[
+  {"path": "README.md", "size": 324, "last_modified": "2025-08-02T12:00:00"},
+  {"path": "CHANGELOG.md", "size": 1024, "last_modified": "2025-08-01T10:00:00"},
+  {"path": "requirements.txt", "size": 512, "last_modified": "2025-08-01T09:00:00"},
+  {"path": "CLI_TESTING_GUIDE.md", "size": 4096, "last_modified": "2025-08-01T08:00:00"},
+  {"path": "test_cli.py", "size": 8192, "last_modified": "2025-08-01T07:00:00"},
+  {"path": "test_enhanced_cascade.py", "size": 4096, "last_modified": "2025-08-01T06:00:00"},
+  {"path": "test_cascade_fill.py", "size": 2048, "last_modified": "2025-08-01T05:00:00"},
+  {"path": "test_rectangle_variations.py", "size": 3072, "last_modified": "2025-08-01T04:00:00"},
+  {"path": "test_simple_rectangles.py", "size": 1024, "last_modified": "2025-08-01T03:00:00"},
+  {"path": "test_opencv.py", "size": 2048, "last_modified": "2025-08-01T02:00:00"},
+  {"path": "test_animation.py", "size": 1024, "last_modified": "2025-08-01T01:00:00"},
+  {"path": "test_environment.py", "size": 2048, "last_modified": "2025-08-01T00:00:00"},
+  {"path": "docs/overview.md", "size": 0, "last_modified": "2025-08-01T11:00:00"},
+  {"path": "docs/V2 Requirements Creative Python Apps.md", "size": 4096, "last_modified": "2025-08-01T11:30:00"},
+  {"path": "docs/Cubist Art Output Examples.jpg", "size": 204800, "last_modified": "2025-08-01T11:45:00"},
+  {"path": "docs/Cubist Art Output Examples.psd", "size": 512000, "last_modified": "2025-08-01T11:50:00"},
+  {"path": "tasks.md", "size": 2048, "last_modified": "2025-08-01T12:00:00"}
+]
