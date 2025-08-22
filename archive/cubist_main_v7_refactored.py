@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from scipy.spatial import Delaunay
 
+
 def run_cubist(input_path, output_dir, total_points=1000, clip_to_alpha=True):
     image = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
     if image is None:
@@ -20,9 +21,13 @@ def run_cubist(input_path, output_dir, total_points=1000, clip_to_alpha=True):
 
     valid_mask = np.argwhere(alpha > 0)
     if valid_mask.shape[0] < total_points:
-        chosen = valid_mask[np.random.choice(valid_mask.shape[0], total_points, replace=True)]
+        chosen = valid_mask[
+            np.random.choice(valid_mask.shape[0], total_points, replace=True)
+        ]
     else:
-        chosen = valid_mask[np.random.choice(valid_mask.shape[0], total_points, replace=False)]
+        chosen = valid_mask[
+            np.random.choice(valid_mask.shape[0], total_points, replace=False)
+        ]
 
     points = chosen[:, [1, 0]]
     tri = Delaunay(points)

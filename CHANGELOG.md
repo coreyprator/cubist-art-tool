@@ -47,3 +47,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Version tracking to log and footer.
 - Geometry logging and verbose debug mode.
 - Run log structured entry/exit messages.
+
+## v2.2 – 2025-08-19
+
+- Fixed PNG/SVG path handling when `--output` is a **directory** (the CLI now writes into that directory; previous logic looked one level up which caused “No PNG found” checks to fail).
+- Hardened metrics contract: basenames normalized; deterministic JSON for identical seeds; defensive writer that enforces required keys.
+- New production runner: `scripts/run_production.ps1` (runs all geometries/stages/seeds, aggregates errors, supports dry-run, step frames, timeouts, SVG limits).
+- Preflight improvements: f-string cleanups; BOM stripping; optional determinism checks.
+- Requirements updated (ensure `shapely` present).
+- Docs: refreshed README (setup, quick start, production batch, troubleshooting).
+
+### Upgrade notes
+
+- **Output directory:**
+  Always pass a directory for `--output` (not a filename). The CLI and batch scripts now expect this and will write all PNG/SVG/metrics/logs inside that directory.
+- **Production scripts:**
+  All run scripts (`run_production.ps1`, etc.) now assume `--output` is a directory. Adjust any custom scripts or automation accordingly.

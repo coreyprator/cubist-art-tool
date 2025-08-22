@@ -62,10 +62,10 @@ cubist_art/
 
 ## Key Benefits
 
-✅ **Package Isolation**: Each project has its own dependencies  
-✅ **Reproducibility**: Same environment across different machines  
-✅ **VS Code Integration**: Automatic interpreter detection  
-✅ **No Global Conflicts**: Avoid issues with system Python packages  
+✅ **Package Isolation**: Each project has its own dependencies
+✅ **Reproducibility**: Same environment across different machines
+✅ **VS Code Integration**: Automatic interpreter detection
+✅ **No Global Conflicts**: Avoid issues with system Python packages
 
 ## VS Code Configuration
 

@@ -8,7 +8,6 @@ import json
 from datetime import datetime, timedelta
 
 
-
 # Print current working directory and program start time
 program_start = datetime.now()
 cwd = os.getcwd()
@@ -19,8 +18,8 @@ print(f"Current working directory: {cwd}")
 CLIP_TRIANGLES_TO_ALPHA = True  # If True, triangles are clipped to alpha>0; if False, triangles are skipped if any vertex is outside alpha>0
 
 
-#INPUT_IMAGE = 'filled_bg_input_image.png'
-INPUT_IMAGE = 'statue_input_image.png'  # Change this to your input image file path
+# INPUT_IMAGE = 'filled_bg_input_image.png'
+INPUT_IMAGE = "statue_input_image.png"  # Change this to your input image file path
 
 # === Edge Visualization Section ===
 # Load image (with transparency if present) and convert to grayscale
@@ -38,14 +37,14 @@ else:
 edges_vis = cv2.Canny(gray_vis, threshold1=100, threshold2=200)
 
 # Save binary edge map
-cv2.imwrite('edges_gray.png', edges_vis)
+cv2.imwrite("edges_gray.png", edges_vis)
 
 # Create red overlay on original image
 overlay_vis = rgb_vis.copy()
 overlay_vis[edges_vis > 0] = [255, 0, 0]  # Red where edges
 
 # Save overlay image
-cv2.imwrite('edge_overlay.png', cv2.cvtColor(overlay_vis, cv2.COLOR_RGB2BGR))
+cv2.imwrite("edge_overlay.png", cv2.cvtColor(overlay_vis, cv2.COLOR_RGB2BGR))
 
 # === Config ===
 
@@ -55,15 +54,17 @@ GROWTH_FACTOR = 1.53
 EDGE_FRACTION = 0.2
 SAVE_POINTS = True
 LOAD_EXISTING_POINTS = False
-POINTS_FILE = 'point_data.json'
+POINTS_FILE = "point_data.json"
 USE_MIXED_GEOMETRY = True  # New flag for mixed geometry rendering
 
 # === Frame Control Settings ===
-single_frame_mode = True  # Set to True to render only one frame at a specific point count
-point_target = 10000       # Used if single_frame_mode is True
-num_frames = 20            # Total number of frames if single_frame_mode is False
-base_point = 2             # Starting number of points for geometric progression
-factor = GROWTH_FACTOR     # Growth factor for geometric progression
+single_frame_mode = (
+    True  # Set to True to render only one frame at a specific point count
+)
+point_target = 10000  # Used if single_frame_mode is True
+num_frames = 20  # Total number of frames if single_frame_mode is False
+base_point = 2  # Starting number of points for geometric progression
+factor = GROWTH_FACTOR  # Growth factor for geometric progression
 
 # === Load and split image (for triangulation) ===
 image_bgra = cv2.imread(INPUT_IMAGE, cv2.IMREAD_UNCHANGED)
@@ -72,11 +73,20 @@ if image_bgra.shape[2] == 4:
     alpha = image_bgra[:, :, 3]
 else:
     image_rgb = cv2.cvtColor(image_bgra, cv2.COLOR_BGR2RGB)
-    alpha = np.ones(image_rgb.shape[:2], dtype=np.uint8) * 255  # No alpha, treat as fully opaque
+    alpha = (
+        np.ones(image_rgb.shape[:2], dtype=np.uint8) * 255
+    )  # No alpha, treat as fully opaque
 
 height, width = image_rgb.shape[:2]
 
-def generate_edge_mask_biased_points(image, total_points=5000, edge_fraction=0.2, mask_path='edge_mask.png', alpha_mask=None):
+
+def generate_edge_mask_biased_points(
+    image,
+    total_points=5000,
+    edge_fraction=0.2,
+    mask_path="edge_mask.png",
+    alpha_mask=None,
+):
     height, width = image.shape[:2]
     num_edge_points = int(total_points * edge_fraction)
     num_random_points = total_points - num_edge_points
@@ -84,15 +94,25 @@ def generate_edge_mask_biased_points(image, total_points=5000, edge_fraction=0.2
     # Load edge mask (assume black pixels are edges)
     edge_mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
     if edge_mask is None or edge_mask.shape != (height, width):
-        raise ValueError(f"Edge mask '{mask_path}' not found or does not match image size.")
+        raise ValueError(
+            f"Edge mask '{mask_path}' not found or does not match image size."
+        )
 
     # Find black pixels (value == 0) in the mask
     edge_coords = np.argwhere(edge_mask == 0)
     # Filter edge_coords by alpha if provided
     if alpha_mask is not None:
-        edge_coords = np.array([pt for pt in edge_coords if alpha_mask[pt[0], pt[1]] > 0])
+        edge_coords = np.array(
+            [pt for pt in edge_coords if alpha_mask[pt[0], pt[1]] > 0]
+        )
     if len(edge_coords) > 0:
-        chosen_edge_points = edge_coords[np.random.choice(edge_coords.shape[0], min(num_edge_points, len(edge_coords)), replace=False)]
+        chosen_edge_points = edge_coords[
+            np.random.choice(
+                edge_coords.shape[0],
+                min(num_edge_points, len(edge_coords)),
+                replace=False,
+            )
+        ]
         # Convert from (row, col) to (x, y)
         chosen_edge_points = chosen_edge_points[:, [1, 0]]
     else:
@@ -103,7 +123,9 @@ def generate_edge_mask_biased_points(image, total_points=5000, edge_fraction=0.2
     if alpha_mask is not None:
         valid_mask = np.argwhere(alpha_mask > 0)
         if len(valid_mask) > 0:
-            idxs = np.random.choice(valid_mask.shape[0], num_random_points, replace=True)
+            idxs = np.random.choice(
+                valid_mask.shape[0], num_random_points, replace=True
+            )
             random_points = valid_mask[idxs][:, [1, 0]]
         else:
             random_points = np.empty((0, 2), dtype=np.int32)
@@ -114,9 +136,13 @@ def generate_edge_mask_biased_points(image, total_points=5000, edge_fraction=0.2
     random_points = np.array(random_points).reshape(-1, 2)
 
     # Add corners (if not transparent)
-    corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
+    corners = np.array(
+        [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]]
+    )
     if alpha_mask is not None:
-        corners = np.array([pt for pt in corners if alpha_mask[pt[1], pt[0]] > 0]).reshape(-1, 2)
+        corners = np.array(
+            [pt for pt in corners if alpha_mask[pt[1], pt[0]] > 0]
+        ).reshape(-1, 2)
     else:
         corners = corners.reshape(-1, 2)
 
@@ -125,23 +151,31 @@ def generate_edge_mask_biased_points(image, total_points=5000, edge_fraction=0.2
 
 
 # === Check edge mask and input image size match ===
-edge_mask_path = 'edge_mask.png'
+edge_mask_path = "edge_mask.png"
 edge_mask_img = cv2.imread(edge_mask_path, cv2.IMREAD_GRAYSCALE)
 if edge_mask_img is None:
     raise FileNotFoundError(f"Edge mask '{edge_mask_path}' not found.")
 if edge_mask_img.shape[0] != height or edge_mask_img.shape[1] != width:
-    raise ValueError(f"Image size mismatch: '{INPUT_IMAGE}' is {width}x{height}, but '{edge_mask_path}' is {edge_mask_img.shape[1]}x{edge_mask_img.shape[0]}.")
+    raise ValueError(
+        f"Image size mismatch: '{INPUT_IMAGE}' is {width}x{height}, but '{edge_mask_path}' is {edge_mask_img.shape[1]}x{edge_mask_img.shape[0]}."
+    )
 
 # === Prepare point set ===
 if LOAD_EXISTING_POINTS and os.path.exists(POINTS_FILE):
-    with open(POINTS_FILE, 'r') as f:
+    with open(POINTS_FILE, "r") as f:
         data = json.load(f)
-        fixed_points = np.array(data['points'])
+        fixed_points = np.array(data["points"])
 else:
-    fixed_points = generate_edge_mask_biased_points(image_rgb, TOTAL_POINTS, EDGE_FRACTION, mask_path=edge_mask_path, alpha_mask=alpha)
+    fixed_points = generate_edge_mask_biased_points(
+        image_rgb,
+        TOTAL_POINTS,
+        EDGE_FRACTION,
+        mask_path=edge_mask_path,
+        alpha_mask=alpha,
+    )
     if SAVE_POINTS:
-        with open(POINTS_FILE, 'w') as f:
-            json.dump({'points': fixed_points.tolist()}, f)
+        with open(POINTS_FILE, "w") as f:
+            json.dump({"points": fixed_points.tolist()}, f)
 
 # === Animation Frames ===
 start_time = time.time()
@@ -154,8 +188,10 @@ if single_frame_mode:
     point_counts = [point_target]
 else:
     frame_indices = range(1, num_frames + 1)
-    point_counts = [min(int(base_point * (factor ** (frame - 1))), TOTAL_POINTS) for frame in frame_indices]
-
+    point_counts = [
+        min(int(base_point * (factor ** (frame - 1))), TOTAL_POINTS)
+        for frame in frame_indices
+    ]
 
 
 for idx, (frame, N) in enumerate(zip(frame_indices, point_counts), 1):
@@ -163,15 +199,20 @@ for idx, (frame, N) in enumerate(zip(frame_indices, point_counts), 1):
     pts = fixed_points[:N]
     # Filter points by alpha (remove points on fully transparent areas)
     if alpha is not None:
-        pts = np.array([
-            pt for pt in pts
-            if (
-                0 <= int(pt[0]) < width and
-                0 <= int(pt[1]) < height and
-                alpha[int(pt[1]), int(pt[0])] > 0
-            )
-        ])
-    points = np.vstack([pts, [[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]]])
+        pts = np.array(
+            [
+                pt
+                for pt in pts
+                if (
+                    0 <= int(pt[0]) < width
+                    and 0 <= int(pt[1]) < height
+                    and alpha[int(pt[1]), int(pt[0])] > 0
+                )
+            ]
+        )
+    points = np.vstack(
+        [pts, [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]]]
+    )
 
     # Start triangulation stopwatch
     checkpoint_time = time.time()
@@ -226,9 +267,9 @@ for idx, (frame, N) in enumerate(zip(frame_indices, point_counts), 1):
                 continue
             mean_color = np.mean(region_pixels, axis=0)
             if (
-                mean_color.shape[0] != 3 or
-                np.any(np.isnan(mean_color)) or
-                not np.all(np.isfinite(mean_color))
+                mean_color.shape[0] != 3
+                or np.any(np.isnan(mean_color))
+                or not np.all(np.isfinite(mean_color))
             ):
                 print(f"[DEBUG] Skipping region {i}: invalid mean color {mean_color}.")
                 continue
@@ -238,7 +279,13 @@ for idx, (frame, N) in enumerate(zip(frame_indices, point_counts), 1):
                 (x, y), radius = cv2.minEnclosingCircle(polygon)
                 if radius < 5:
                     rect = cv2.boundingRect(polygon)
-                    cv2.rectangle(canvas, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), color_tuple, -1)
+                    cv2.rectangle(
+                        canvas,
+                        (rect[0], rect[1]),
+                        (rect[0] + rect[2], rect[1] + rect[3]),
+                        color_tuple,
+                        -1,
+                    )
                 else:
                     cv2.circle(canvas, (int(x), int(y)), int(radius), color_tuple, -1)
             else:  # High variance: use triangle
@@ -248,11 +295,9 @@ for idx, (frame, N) in enumerate(zip(frame_indices, point_counts), 1):
         pass
 
     # === Inpaint voids after all geometry is rendered ===
-    void_mask = (
-        (np.all(canvas == 0, axis=2)) & (alpha > 0)
-    ).astype(np.uint8)
+    void_mask = ((np.all(canvas == 0, axis=2)) & (alpha > 0)).astype(np.uint8)
     # Save void mask for debug
-    void_mask_path = f'void_mask_{frame:02d}_{N:05d}pts.png'
+    void_mask_path = f"void_mask_{frame:02d}_{N:05d}pts.png"
     cv2.imwrite(void_mask_path, void_mask * 255)
     print(f"Saved: {os.path.abspath(void_mask_path)} (void mask)")
     # Dilate void mask to include edge areas
@@ -266,7 +311,9 @@ for idx, (frame, N) in enumerate(zip(frame_indices, point_counts), 1):
         # Check for remaining black after inpainting
         remaining_void = (np.all(canvas == 0, axis=2)) & (alpha > 0)
         if np.any(remaining_void):
-            print(f"[WARNING] Remaining black voids after inpainting. Applying fallback fill.")
+            print(
+                "[WARNING] Remaining black voids after inpainting. Applying fallback fill."
+            )
             # Fill remaining voids with neutral color (e.g., mean of image_rgb where alpha > 0)
             neutral_color = tuple(int(x) for x in np.mean(image_rgb[alpha > 0], axis=0))
             for c in range(3):
@@ -274,24 +321,26 @@ for idx, (frame, N) in enumerate(zip(frame_indices, point_counts), 1):
                 channel[remaining_void] = neutral_color[c]
                 canvas[:, :, c] = channel
             # Save fallback void mask for debug
-            fallback_mask_path = f'void_mask_fallback_{frame:02d}_{N:05d}pts.png'
+            fallback_mask_path = f"void_mask_fallback_{frame:02d}_{N:05d}pts.png"
             cv2.imwrite(fallback_mask_path, remaining_void.astype(np.uint8) * 255)
             print(f"Saved: {os.path.abspath(fallback_mask_path)} (fallback void mask)")
 
-    frame_name = f'frame_{frame:02d}_{N:05d}pts.png'
-    combined_frame_name = f'frame_{frame:02d}_{N:05d}pts_with_edges.png'
+    frame_name = f"frame_{frame:02d}_{N:05d}pts.png"
+    combined_frame_name = f"frame_{frame:02d}_{N:05d}pts_with_edges.png"
 
     if image_bgra.shape[2] == 4:
         # Preserve alpha in output
         canvas_rgba = np.dstack((canvas, alpha))
         # Validate that canvas_rgba is not all black/zero
         if not np.any(canvas_rgba[:, :, :3]):
-            print(f"[WARNING] canvas_rgba is all black/zero before saving {frame_name}!")
-        plt.figure(figsize=(width/100, height/100), dpi=100)
-        plt.axis('off')
+            print(
+                f"[WARNING] canvas_rgba is all black/zero before saving {frame_name}!"
+            )
+        plt.figure(figsize=(width / 100, height / 100), dpi=100)
+        plt.axis("off")
         plt.imshow(canvas_rgba)
         plt.tight_layout(pad=0)
-        plt.savefig(frame_name, bbox_inches='tight', pad_inches=0, transparent=True)
+        plt.savefig(frame_name, bbox_inches="tight", pad_inches=0, transparent=True)
         plt.close()
         print(f"Saved: {os.path.abspath(frame_name)}")
         # === OPTIONAL EDGE OVERLAY ===
@@ -307,11 +356,11 @@ for idx, (frame, N) in enumerate(zip(frame_indices, point_counts), 1):
         # Validate that canvas is not all black/zero
         if not np.any(canvas):
             print(f"[WARNING] canvas is all black/zero before saving {frame_name}!")
-        plt.figure(figsize=(width/100, height/100), dpi=100)
-        plt.axis('off')
+        plt.figure(figsize=(width / 100, height / 100), dpi=100)
+        plt.axis("off")
         plt.imshow(canvas)
         plt.tight_layout(pad=0)
-        plt.savefig(frame_name, bbox_inches='tight', pad_inches=0)
+        plt.savefig(frame_name, bbox_inches="tight", pad_inches=0)
         plt.close()
         print(f"Saved: {os.path.abspath(frame_name)}")
         # === OPTIONAL EDGE OVERLAY ===
@@ -359,7 +408,9 @@ for idx, (frame, N) in enumerate(zip(frame_indices, point_counts), 1):
     frame_minutes, frame_secs = divmod(int(frame_elapsed), 60)
     now_str = datetime.now().strftime("[%H:%M:%S]")
 
-    print(f"{now_str} Saved {frame_name} | Frame: {idx}/{len(point_counts)} | Elapsed: {frame_minutes}m {frame_secs}s | Total: {total_minutes}m {total_secs}s | ETA: {eta_minutes}m {eta_secs}s (Finish by {finish_str})")
+    print(
+        f"{now_str} Saved {frame_name} | Frame: {idx}/{len(point_counts)} | Elapsed: {frame_minutes}m {frame_secs}s | Total: {total_minutes}m {total_secs}s | ETA: {eta_minutes}m {eta_secs}s (Finish by {finish_str})"
+    )
     prev_time = curr_time
 
 end_time = time.time()

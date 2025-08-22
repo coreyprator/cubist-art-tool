@@ -117,7 +117,7 @@
 ### **Test Results:**
 All geometry modes successfully tested with enhanced features:
 - ✅ Delaunay: Spatial optimization working
-- ✅ Voronoi: Adjacency-based placement working  
+- ✅ Voronoi: Adjacency-based placement working
 - ✅ Rectangles: Rotational variety working
 - ✅ Comparison: Clear improvement over regular tessellation
 

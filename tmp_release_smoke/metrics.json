@@ -1,0 +1,36 @@
+{
+  "mode": "delaunay",
+  "seed": 123,
+  "cascade": {
+    "enabled": true,
+    "stages": 3
+  },
+  "inputs": {
+    "input": "G:\\My Drive\\Code\\Python\\cubist_art\\tmp_release_smoke\\in.png",
+    "mask": null
+  },
+  "outputs": {},
+  "params": {
+    "points": 120,
+    "export_svg": true,
+    "svg_limit": null
+  },
+  "stages": [
+    {
+      "stage": 1,
+      "points": 120
+    },
+    {
+      "stage": 2,
+      "points": 120
+    },
+    {
+      "stage": 3,
+      "points": 120
+    }
+  ],
+  "totals": {
+    "points": 120,
+    "stages": 3
+  }
+}

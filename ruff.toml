@@ -1,0 +1,6 @@
+exclude = [
+  "tests/**",
+  "scripts/legacy_tests/**",
+  "Archived Output/**",
+  "archive/**"
+]

@@ -15,4 +15,3 @@ Cubist GUI v2 - Instructions
    - Install pyinstaller: pip install pyinstaller
    - Run: pyinstaller --onefile cubist_gui.py
    - Output will be in the `dist/` directory.
-

@@ -11,8 +11,8 @@ print(f"[START {program_start.strftime('%H:%M:%S')}] Program started.")
 print(f"Current working directory: {cwd}")
 
 # === Config ===
-INPUT_IMAGE = 'statue_input_image.png'
-INPUT_MASK = 'edge_mask.png'
+INPUT_IMAGE = "statue_input_image.png"
+INPUT_MASK = "edge_mask.png"
 TOTAL_POINTS = 1000
 EDGE_FRACTION = 0.2
 USE_MIXED_GEOMETRY = True
@@ -43,12 +43,14 @@ if edge_mask_img is None or edge_mask_img.shape != (height, width):
 # === Point Sampling ===
 edge_coords = np.argwhere(edge_mask_img == 0)
 edge_coords = np.array([pt for pt in edge_coords if alpha[pt[0], pt[1]] > 0])
-edge_coords = edge_coords[:, [1, 0]] if edge_coords.size else np.empty((0, 2), dtype=np.int32)
+edge_coords = (
+    edge_coords[:, [1, 0]] if edge_coords.size else np.empty((0, 2), dtype=np.int32)
+)
 valid_mask = np.argwhere(alpha > 0)
 remaining = TOTAL_POINTS - len(edge_coords)
 idxs = np.random.choice(valid_mask.shape[0], remaining, replace=True)
 random_points = valid_mask[idxs][:, [1, 0]]
-corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
+corners = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]])
 points = np.vstack((edge_coords, random_points, corners))
 
 # === Triangles ===
@@ -83,13 +85,19 @@ if USE_MIXED_GEOMETRY:
             (x, y), radius = cv2.minEnclosingCircle(polygon)
             if radius < 5:
                 rect = cv2.boundingRect(polygon)
-                cv2.rectangle(canvas, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), color_tuple, -1)
+                cv2.rectangle(
+                    canvas,
+                    (rect[0], rect[1]),
+                    (rect[0] + rect[2], rect[1] + rect[3]),
+                    color_tuple,
+                    -1,
+                )
             else:
                 cv2.circle(canvas, (int(x), int(y)), int(radius), color_tuple, -1)
         else:
             cv2.fillPoly(canvas, [polygon], color_tuple)
 
 # === Save Final Output ===
-frame_name = f'frame_{frame:02d}_{TOTAL_POINTS:05d}pts.png'
+frame_name = f"frame_{frame:02d}_{TOTAL_POINTS:05d}pts.png"
 cv2.imwrite(frame_name, cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR))
 print(f"Saved final output: {os.path.abspath(frame_name)}")

@@ -1,4 +1,3 @@
-
 import cv2
 import numpy as np
 from scipy.spatial import Delaunay, Voronoi
@@ -12,8 +11,8 @@ print(f"[START {program_start.strftime('%H:%M:%S')}] Program started.")
 print(f"Current working directory: {cwd}")
 
 # === Config ===
-INPUT_IMAGE = 'statue_input_image.png'
-INPUT_MASK = 'edge_mask.png'
+INPUT_IMAGE = "statue_input_image.png"
+INPUT_MASK = "edge_mask.png"
 TOTAL_POINTS = 1000
 USE_MIXED_GEOMETRY = True
 frame = 1
@@ -43,11 +42,15 @@ if edge_mask_img is None or edge_mask_img.shape != (height, width):
 # === Point Generation ===
 edge_coords = np.argwhere(edge_mask_img == 0)
 edge_coords = np.array([pt for pt in edge_coords if alpha[pt[0], pt[1]] > 0])
-edge_coords = edge_coords[:, [1, 0]] if edge_coords.size else np.empty((0, 2), dtype=np.int32)
+edge_coords = (
+    edge_coords[:, [1, 0]] if edge_coords.size else np.empty((0, 2), dtype=np.int32)
+)
 valid_mask = np.argwhere(alpha > 0)
-idxs = np.random.choice(valid_mask.shape[0], TOTAL_POINTS - len(edge_coords), replace=True)
+idxs = np.random.choice(
+    valid_mask.shape[0], TOTAL_POINTS - len(edge_coords), replace=True
+)
 random_points = valid_mask[idxs][:, [1, 0]]
-corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
+corners = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]])
 points = np.vstack((edge_coords, random_points, corners))
 
 # === Geometry ===
@@ -84,6 +87,6 @@ if USE_MIXED_GEOMETRY:
             canvas[:, :, c][valid_area] = mean_color[c]
 
 # === Save Output ===
-output_name = f'frame_{frame:02d}_{TOTAL_POINTS:05d}pts.png'
+output_name = f"frame_{frame:02d}_{TOTAL_POINTS:05d}pts.png"
 cv2.imwrite(output_name, cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR))
 print(f"Saved: {os.path.abspath(output_name)}")

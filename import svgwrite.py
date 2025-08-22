@@ -1,9 +1,14 @@
 import svgwrite
 from typing import List, Tuple
 
-def export_delaunay_svg(triangles: List[Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float]]],
-                        filename: str,
-                        metadata: dict = None):
+
+def export_delaunay_svg(
+    triangles: List[
+        Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float]]
+    ],
+    filename: str,
+    metadata: dict = None,
+):
     """
     Export Delaunay triangles to SVG.
     Args:
@@ -11,22 +16,23 @@ def export_delaunay_svg(triangles: List[Tuple[Tuple[float, float], Tuple[float, 
         filename: Output SVG file path.
         metadata: Optional dict for Illustrator-compatible metadata.
     """
-    dwg = svgwrite.Drawing(filename, profile='full')
-    
+    dwg = svgwrite.Drawing(filename, profile="full")
+
     # Add metadata (placeholder for Illustrator compatibility)
     if metadata:
         for key, value in metadata.items():
-            dwg.add(svgwrite.base.Element('metadata', attrib={key: str(value)}))
-    
+            dwg.add(svgwrite.base.Element("metadata", attrib={key: str(value)}))
+
     # Group for triangles
-    triangle_group = dwg.add(dwg.g(id='delaunay-triangles'))
-    
+    triangle_group = dwg.add(dwg.g(id="delaunay-triangles"))
+
     for tri in triangles:
         triangle_group.add(
-            dwg.polygon(points=tri, fill='none', stroke='black', stroke_width=1)
+            dwg.polygon(points=tri, fill="none", stroke="black", stroke_width=1)
         )
-    
+
     dwg.save()
+
 
 def export_grouped_svg(groups: dict, filename: str, metadata: dict = None):
     """
@@ -36,17 +42,17 @@ def export_grouped_svg(groups: dict, filename: str, metadata: dict = None):
         filename: Output SVG file path.
         metadata: Optional dict for Illustrator-compatible metadata.
     """
-    dwg = svgwrite.Drawing(filename, profile='full')
-    
+    dwg = svgwrite.Drawing(filename, profile="full")
+
     # Add metadata (placeholder)
     if metadata:
         for key, value in metadata.items():
-            dwg.add(svgwrite.base.Element('metadata', attrib={key: str(value)}))
-    
+            dwg.add(svgwrite.base.Element("metadata", attrib={key: str(value)}))
+
     for group_name, polygons in groups.items():
         group = dwg.add(dwg.g(id=group_name))
         for poly in polygons:
             group.add(
-                dwg.polygon(points=poly, fill='none', stroke='black', stroke_width=1)
+                dwg.polygon(points=poly, fill="none", stroke="black", stroke_width=1)
             )
     dwg.save()

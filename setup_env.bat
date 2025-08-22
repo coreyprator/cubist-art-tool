@@ -57,7 +57,7 @@ if exist "requirements.txt" (
 REM Verify installation
 echo.
 echo Environment setup complete!
-echo Python version: 
+echo Python version:
 python --version
 echo.
 echo Virtual environment location: %VIRTUAL_ENV%

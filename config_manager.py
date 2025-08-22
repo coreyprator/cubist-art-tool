@@ -11,9 +11,11 @@ import os
 
 CONFIG_FILE = "last_config.json"
 
+
 def save_config(config):
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f)
+
 
 def load_last_config():
     if os.path.exists(CONFIG_FILE):
@@ -23,5 +25,6 @@ def load_last_config():
         except Exception:
             return {}
     return {}
+
 
 # Version v12c | Timestamp: 2025-07-27 22:35 UTC | Hash: manual_fix

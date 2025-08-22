@@ -1,13 +1,11 @@
-
 import cv2
 import numpy as np
 from scipy.spatial import Delaunay, Voronoi
 import os
-from datetime import datetime
 
 # === CONFIG ===
-INPUT_IMAGE = 'statue_input_image.png'
-INPUT_MASK = 'edge_mask.png'
+INPUT_IMAGE = "statue_input_image.png"
+INPUT_MASK = "edge_mask.png"
 TOTAL_POINTS = 10
 EDGE_FRACTION = 0.2
 USE_MIXED_GEOMETRY = True
@@ -38,12 +36,14 @@ if edge_mask_img is None or edge_mask_img.shape != (height, width):
 # === Generate Points ===
 edge_coords = np.argwhere(edge_mask_img == 0)
 edge_coords = np.array([pt for pt in edge_coords if alpha[pt[0], pt[1]] > 0])
-edge_coords = edge_coords[:, [1, 0]] if edge_coords.size else np.empty((0, 2), dtype=np.int32)
+edge_coords = (
+    edge_coords[:, [1, 0]] if edge_coords.size else np.empty((0, 2), dtype=np.int32)
+)
 valid_mask = np.argwhere(alpha > 0)
 remaining = TOTAL_POINTS - len(edge_coords)
 idxs = np.random.choice(valid_mask.shape[0], max(0, remaining), replace=True)
 random_points = valid_mask[idxs][:, [1, 0]]
-corners = np.array([[0, 0], [width-1, 0], [width-1, height-1], [0, height-1]])
+corners = np.array([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]])
 points = np.vstack((edge_coords, random_points, corners))
 
 # === Triangulation & Voronoi ===
@@ -82,6 +82,6 @@ if USE_MIXED_GEOMETRY:
 # === Output as Transparent PNG ===
 canvas_bgra = cv2.cvtColor(canvas, cv2.COLOR_RGB2BGRA)
 canvas_bgra[:, :, 3] = alpha
-output_path = f'frame_{frame:02d}_{len(points):05d}pts.png'
+output_path = f"frame_{frame:02d}_{len(points):05d}pts.png"
 cv2.imwrite(output_path, canvas_bgra)
 print(f"Saved: {os.path.abspath(output_path)}")

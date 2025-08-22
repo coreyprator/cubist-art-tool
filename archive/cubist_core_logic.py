@@ -1,9 +1,11 @@
-
 import os
 import cv2
 import numpy as np
 
-def run_cubist_pipeline(input_path, output_dir, total_points=1000, clip_to_alpha=True, mask_path=None):
+
+def run_cubist_pipeline(
+    input_path, output_dir, total_points=1000, clip_to_alpha=True, mask_path=None
+):
     try:
         image = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
         if image is None:
@@ -16,7 +18,11 @@ def run_cubist_pipeline(input_path, output_dir, total_points=1000, clip_to_alpha
         else:
             mask = np.ones(image.shape[:2], dtype=np.uint8) * 255
 
-        canvas = np.full(image.shape[:2] + (3,), fill_value=int(np.mean(image[mask > 0])), dtype=np.uint8)
+        canvas = np.full(
+            image.shape[:2] + (3,),
+            fill_value=int(np.mean(image[mask > 0])),
+            dtype=np.uint8,
+        )
 
         h, w = image.shape[:2]
         pts = np.random.randint(0, [w, h], size=(total_points, 2))

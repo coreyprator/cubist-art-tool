@@ -35,7 +35,7 @@ rect_height = int(size * np.random.uniform(0.5, 2.0))
 
 #### **Aspect Ratio Variety:**
 - **Wide rectangles**: 2.0 × 0.5 = 4:1 aspect ratio
-- **Tall rectangles**: 0.5 × 2.0 = 1:4 aspect ratio  
+- **Tall rectangles**: 0.5 × 2.0 = 1:4 aspect ratio
 - **Square-ish**: 1.0 × 1.0 = 1:1 aspect ratio
 - **Everything in between**: Continuous range of variations
 
@@ -86,7 +86,7 @@ All rectangle enhancement tests passed successfully:
 x0 = center_x - half_width
 x1 = center_x + half_width
 
-# Clamp to boundaries  
+# Clamp to boundaries
 x0 = max(0, x0)
 x1 = min(width, x1)
 

@@ -76,14 +76,14 @@ from cubist_logger import logger
 ```python
 def example_function(param1, param2):
     logger.info(f"example_function() ENTRY: param1={param1}, param2={param2}")
-    
+
     try:
         # Function logic here
         logger.info("Operation completed successfully")
         result = some_result
         logger.info(f"example_function() EXIT: result={result}")
         return result
-        
+
     except Exception as e:
         logger.error(f"example_function() FAILED: {str(e)}")
         raise
@@ -182,7 +182,7 @@ type logs\error_log.txt
 The Cubist Art Generator now has comprehensive logging throughout all source files, providing:
 
 - 🔍 **Complete visibility** into all operations
-- 🐛 **Enhanced debugging** capabilities  
+- 🐛 **Enhanced debugging** capabilities
 - 📊 **Performance monitoring** data
 - 🧪 **Test execution tracking**
 - 🛠️ **Error diagnosis** support

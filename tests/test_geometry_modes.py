@@ -1,15 +1,14 @@
-
 # test_geometry_modes.py
 
 
 import sys
 import os
+
 # Add parent directory to sys.path so imports work
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from cubist_core_logic import run_cubist
 from cubist_logger import log_message
 import cv2
-import datetime
 
 INPUT_IMAGE = "G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg"  # Update this with your actual image path
 OUTPUT_DIR = "output/tests"
@@ -23,7 +22,10 @@ MASK_PATH = "G:/My Drive/Code/Python/cubist_art/input/edge_mask.png"
 
 
 def log_exception(mode, exc):
-    log_message(f"EXCEPTION: {mode} failed with error: [{type(exc).__name__}: {exc}]", level="error")
+    log_message(
+        f"EXCEPTION: {mode} failed with error: [{type(exc).__name__}: {exc}]",
+        level="error",
+    )
 
 
 def overlay_mode_on_image(image_path, mode):
@@ -40,15 +42,18 @@ def overlay_mode_on_image(image_path, mode):
         x, y = 10, th + 10
         if img.shape[2] == 4:
             overlay = img.copy()
-            cv2.putText(overlay, text, (x, y), font, font_scale, color, thickness, cv2.LINE_AA)
+            cv2.putText(
+                overlay, text, (x, y), font, font_scale, color, thickness, cv2.LINE_AA
+            )
             alpha = 0.7
             cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0, img)
         else:
-            cv2.putText(img, text, (x, y), font, font_scale, color, thickness, cv2.LINE_AA)
+            cv2.putText(
+                img, text, (x, y), font, font_scale, color, thickness, cv2.LINE_AA
+            )
         cv2.imwrite(image_path, img)
     except Exception as e:
         log_exception(mode, e)
-
 
 
 for mask_setting, mask_label in [(None, "no mask"), (MASK_PATH, "with mask")]:
@@ -63,7 +68,7 @@ for mask_setting, mask_label in [(None, "no mask"), (MASK_PATH, "with mask")]:
                 total_points=500,
                 clip_to_alpha=False,
                 verbose=True,
-                geometry_mode=mode
+                geometry_mode=mode,
             )
             if mode != "invalid_mode":
                 overlay_mode_on_image(output_path, mode)

@@ -2,6 +2,7 @@
 Cubist Logger Utility
 Reusable logging setup for CLI, GUI, and tests.
 """
+
 import os
 import logging
 

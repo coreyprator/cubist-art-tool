@@ -10,12 +10,14 @@ def sorting_algorithm(x):
                 x[j], x[j + 1] = x[j + 1], x[j]
     return x
 
+
 def sorting_algorithm2(x):
     for i in range(len(x)):
         for j in range(len(x) - 1):
             if x[j] > x[j + 1]:
                 x[j], x[j + 1] = x[j + 1], x[j]
     return x
+
 
 class TestSortingAlgorithms(unittest.TestCase):
     def test_sorting_algorithm_sorted(self):
@@ -47,6 +49,7 @@ class TestSortingAlgorithms(unittest.TestCase):
 
     def test_sorting_algorithm2_single(self):
         self.assertEqual(sorting_algorithm2([42]), [42])
+
 
 if __name__ == "__main__":
     unittest.main()

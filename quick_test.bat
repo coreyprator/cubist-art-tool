@@ -54,7 +54,7 @@ goto end
 echo.
 echo Available geometry modes:
 echo 1. delaunay
-echo 2. voronoi  
+echo 2. voronoi
 echo 3. rectangles
 echo.
 set /p geo_choice="Choose geometry (1-3): "

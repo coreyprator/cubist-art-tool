@@ -1,54 +1,51 @@
-# Cubist Art Generator – V2 Tasks
+# Cubist Art Generator — Roadmap & Tasks
 
-This file tracks the implementation plan for version 2 of the app.
+## Release Notes Summary (v2.2)
+- Fixed output directory handling (PNG/SVG outputs now consistent).
+- Batch script supports multiple geometries, seeds, and cascade stages with consolidated logging.
+- Determinism & metrics logging validated.
+- SVG export implemented and working.
+- Deterministic point sampling with `--seed`
+- Geometry modes: delaunay, voronoi, rectangles
+- Cascade fill (multi-stage refinement)
+- PNG/SVG output with parity
+- Metrics logging and normalization
+- CLI argument validation and error handling
 
-## 🧱 Phase 1: Geometry Engine Upgrade
-- [x] Refactor core logic to support multiple geometry modes
-- [x] Implement Voronoi fill mode
-- [x] Implement rectangle fill mode
-- [x] Add geometry_mode field to config
-- [x] Output files include geometry type in filename
-- [x] Add CascadeFill toggle for all geometry modes
-- [x] Create comprehensive CLI testing script
-- [x] **ENHANCED**: Implement spatial optimization for cascade fill
-- [x] **ENHANCED**: Add adjacency-based placement for better space utilization
-- [x] **ENHANCED**: Implement distance transform and priority mapping
-- [x] **ENHANCED**: Add rotational variety and organic shape generation
+---
 
-## 🎨 Phase 2: Color LUT & Palette System
-- [ ] Load external LUT file (e.g., .cube, JSON)
-- [ ] Apply LUT to triangle fill
-- [ ] Add debug overlays for LUT effect
-- [ ] Enable palette-constrained mode
+V2.3 + Tasks
 
-## 🧪 Phase 3: Stepwise Fill Preview (CLI)
-- [x] Implement incremental shape-fill preview logic (CascadeFill)
-- [x] Export each step as a separate PNG (batch mode)
-- [x] Allow step size setting in config (save_step_frames parameter)
-- [x] Create CLI interface for testing all modes
+## Phase 2: Presets, Config Loader, and UI/UX Front-End
 
-## 🎯 Phase 3.5: Density-Guided Point Sampling
-- [x] Add `--density_mask` CLI option for grayscale density maps
-- [x] Implement rejection sampling based on density probabilities
-- [x] Replace random point generation with density-guided sampling
-- [x] Add fallback to random sampling when no density map provided
-- [x] Ensure compatibility with all geometry types (delaunay, voronoi, rectangles)
-- [x] Add comprehensive logging for density sampling iterations
-- [x] Optional: Add density map visualization for debugging
-- [x] Test density sampling with various density map patterns
+- UI/UX front-end wrapper for easier user interaction
+- Presets: save/load prior CLI configurations (geometry, cascade stages, seed, etc.) into JSON files
+- UI provides dropdowns or selectors for launching with presets
+- Marked as a requirement for the next release
 
-## 🧰 Phase 4: Presets & Config Loader
-- [ ] Load/save presets (geometry + color settings)
-- [ ] Add preset manager CLI options
-- [ ] Store presets as JSON files in /presets/
+## Phase 3: SVG Input Parsing & Timeline Scrubber
 
-## 🖼 Phase 5: SVG Export
-- [ ] Basic vector export for Delaunay results
-- [ ] Grouped/layered SVG output
-- [ ] Illustrator-compatible metadata
+- SVG input parsing: user can input Illustrator-modified or simplified SVG files as a starting geometry, then re-run through the generator for iterative refinement
+- Timeline scrubber UI: allows stepping through cascade fill frames interactively
+- Automated playback export (animated GIF or MP4), with parameters for frames per second or frame duration per step
 
-## 🧠 Phase 6+: Future
-- [ ] AI-assisted mask generation (external tool hook)
-- [ ] SVG input parsing (optional)
-- [ ] Timeline scrubber UI
-- [ ] Modular plugin system for new shape logic
+## Phase 4: Modular Plugin System (New Shape Logic)
+
+- Modular architecture for adding new geometry modes independently
+- Planned geometries for next release:
+  - Hexagonal grids
+  - Circle packing
+  - Line hatch fills
+  - Superellipse / squircle tessellation
+  - L-systems or fractals
+  - Image-derived contour primitives
+
+---
+
+## Historical Notes
+
+- **Color LUT & Palette System:**
+  Explored in early planning but deferred/eliminated in favor of using external color tools like Photoshop for advanced palette work.
+
+- **AI-assisted Mask Generation:**
+  Considered but rejected in favor of manual, human-controlled masks for higher artistic fidelity.

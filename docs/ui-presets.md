@@ -1,0 +1,44 @@
+# UI/UX Wrapper & Presets (v2.3+)
+
+**Status:** Planned for next release
+
+## Overview
+
+A minimal local UI wrapper (Python + tkinter or PySimpleGUI) will allow users to configure and launch the CLI visually.
+
+## Features
+
+- Load/Save presets (JSON) under `/presets`
+  - Presets include geometry, points, cascade stages, SVG limit, seed, export options, etc.
+- "Run" button launches the CLI with chosen parameters and shows a live log tail.
+- "Open output folder" button on completion.
+- CLI fallback: `--preset NAME` and `--save-preset NAME` flags.
+
+## Example Preset JSON
+
+```json
+{
+  "geometry": "delaunay",
+  "points": 200,
+  "cascade_stages": 3,
+  "svg_limit": 150,
+  "seed": 123,
+  "export_svg": true
+}
+```
+
+## CLI Usage
+
+```powershell
+python cubist_cli.py --preset "my_favorite" --output output\from_preset --export-svg
+python cubist_cli.py --save-preset "new_preset" --geometry voronoi --points 100 --output output\save
+```
+
+## Tests
+
+- Preset round-trip (load/save) unit tests
+- Smoke test: launch CLI with a preset
+
+---
+
+*See also: [README.md](../README.md)*

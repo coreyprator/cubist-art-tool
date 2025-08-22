@@ -1,18 +1,60 @@
-﻿.venv/
-venv/
+# ---------- Python bytecode & caches ----------
 __pycache__/
-logs/
-output/
-Archived Output/
-*.zip
-logs/
-*.log
-output/
-Archived Output/
-archive/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.cache/
+
+# ---------- Virtual environments ----------
+.venv/
+venv/
+env/
+.env
+.env.*
+.conda/
+
+# ---------- Build / packaging ----------
 build/
 dist/
 *.egg-info/
+
+# ---------- Coverage / reports ----------
+.coverage*
+coverage.xml
+htmlcov/
+
+# ---------- OS / Editor noise ----------
 .DS_Store
 Thumbs.db
+desktop.ini
+Icon?
+.vscode/
+.idea/
+*.code-workspace
+
+# ---------- Archives ----------
 *.zip
+*.7z
+*.tar
+*.tar.gz
+
+# ---------- Project-specific (generated / bulky) ----------
+output/
+Archived Output/
+archive/
+debug/
+logs/
+*.log
+*.tmp
+*.bak
+
+# Keep input/ but ignore contents
+input/*
+!input/.gitkeep
+
+*.pyc
+*.pyo
+*.pyd
