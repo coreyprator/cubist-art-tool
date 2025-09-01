@@ -2,9 +2,9 @@
 # Project: Cubist Art
 # File: docs/ui-presets.md
 # Version: v2.3.7
-# Build: 2025-09-01T11:18:25
-# Commit: 374dfa9
-# Stamped: 2025-09-01T11:18:31+02:00
+# Build: 2025-09-01T11:23:56
+# Commit: f01b715
+# Stamped: 2025-09-01T11:24:00+02:00
 # === CUBIST STAMP END ===
 # UI/UX Wrapper & Presets (v2.3+)
 
@@ -51,6 +51,7 @@ python cubist_cli.py --save-preset "new_preset" --geometry voronoi --points 100 
 
 *See also: [README.md](../README.md)*
 
+
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.7 - stamped 2025-09-01T11:18:31+02:00
+# End of file - v2.3.7 - stamped 2025-09-01T11:24:00+02:00
 # === CUBIST FOOTER STAMP END ===

@@ -2,9 +2,9 @@
 # Project: Cubist Art
 # File: geometry_registry.py
 # Version: v2.3.7
-# Build: 2025-09-01T11:18:25
-# Commit: 374dfa9
-# Stamped: 2025-09-01T11:18:29+02:00
+# Build: 2025-09-01T11:23:56
+# Commit: f01b715
+# Stamped: 2025-09-01T11:23:59+02:00
 # === CUBIST STAMP END ===
 
 # ============================================================================
@@ -125,5 +125,5 @@ def load_plugins(directory: str | Path) -> None:
 
 
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.7 - stamped 2025-09-01T11:18:29+02:00
+# End of file - v2.3.7 - stamped 2025-09-01T11:23:59+02:00
 # === CUBIST FOOTER STAMP END ===

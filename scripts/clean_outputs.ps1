@@ -2,9 +2,9 @@
 # Project: Cubist Art
 # File: scripts/clean_outputs.ps1
 # Version: v2.3.7
-# Build: 2025-09-01T11:18:25
-# Commit: 374dfa9
-# Stamped: 2025-09-01T11:18:32+02:00
+# Build: 2025-09-01T11:23:56
+# Commit: f01b715
+# Stamped: 2025-09-01T11:24:01+02:00
 # === CUBIST STAMP END ===
 # This script is a PowerShell script, not a Python script.
 # To run it, use PowerShell, not python:
@@ -42,6 +42,7 @@ Get-ChildItem -Path $Root -Directory | ForEach-Object {
 $grandTotalMB = "{0:N2}" -f ($grandTotal / 1MB)
 Write-Host "Grand total size of deleted items: $grandTotalMB MB ($grandTotal bytes)"
 
+
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.7 - stamped 2025-09-01T11:18:32+02:00
+# End of file - v2.3.7 - stamped 2025-09-01T11:24:01+02:00
 # === CUBIST FOOTER STAMP END ===
