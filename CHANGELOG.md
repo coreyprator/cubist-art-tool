@@ -2,9 +2,9 @@
 # Project: Cubist Art
 # File: CHANGELOG.md
 # Version: v2.3.7
-# Build: 2025-09-01T11:23:56
-# Commit: f01b715
-# Stamped: 2025-09-01T11:23:57+02:00
+# Build: 2025-09-01T13:31:41
+# Commit: 8163630
+# Stamped: 2025-09-01T13:31:43+02:00
 # === CUBIST STAMP END ===
 <!-- Keep a Changelog: https://keepachangelog.com/en/1.0.0/ -->
 # Changelog
@@ -73,6 +73,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   All run scripts (`run_production.ps1`, etc.) now assume `--output` is a directory. Adjust any custom scripts or automation accordingly.
 
 
+
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.7 - stamped 2025-09-01T11:23:57+02:00
+# End of file - v2.3.7 - stamped 2025-09-01T13:31:43+02:00
 # === CUBIST FOOTER STAMP END ===
