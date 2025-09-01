@@ -1,11 +1,24 @@
 <#
 .SYNOPSIS
     Package Cubist Art Tool source files into a clean ZIP archive for handoff.
+
 .DESCRIPTION
     Collects all .py, .ps1, .bat, .md, .txt, and docs/scripts from the repo,
     excluding output/, archive/, logs, caches, venvs, and other generated files.
+
+.USAGE
+    powershell -ExecutionPolicy Bypass -File scripts\archive_source.ps1 [-ZipName "cubist_art_v23_prep.zip"]
+
+.PARAMETER ZipName
+    The name of the output zip file (default: cubist_art_v23_prep.zip).
+
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\archive_source.ps1 -ZipName "cubist_art_v23_prep.zip"
+    powershell -ExecutionPolicy Bypass -File scripts\archive_source.ps1
+    powershell -ExecutionPolicy Bypass -File scripts\archive_source.ps1 -ZipName "my_custom_name.zip"
+
+.NOTES
+    Run from the repo root. The archive will include only source and documentation files,
+    not outputs or virtual environments.
 #>
 
 param(

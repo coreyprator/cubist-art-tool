@@ -1,5 +1,28 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: cubist_gui_main.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:03
+# === CUBIST STAMP END ===
+# ======================================================================
+# File: cubist_gui_main.py
+# Stamp: 2025-08-22T17:31:37Z
+# (Auto-added header for paste verification)
+# ======================================================================
 """
 Cubist Art Generator GUI
+
+Usage:
+    python cubist_gui_main.py
+
+- Launches a simple Tkinter GUI for generating Cubist Art images.
+- Lets you select input image, output directory, mask image, and point count.
+- Remembers your last-used settings between runs.
+- Click "Generate" to run the core logic and produce output.
+- This GUI always runs the default geometry mode (usually 'delaunay') as implemented by run_cubist in cubist_core_logic.py.
+- It was written as a basic test, and is not the main GUI for production use.
 
 __version__ = "v12d"
 __author__ = "Corey Prator"
@@ -151,3 +174,9 @@ root.mainloop()
 
 
 # Version v12d | Timestamp: 2025-07-27 17:32 UTC | Hash: <SHA256>
+# ======================================================================
+# End of File: cubist_gui_main.py  (2025-08-22T17:31:37Z)
+# ======================================================================
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:03
+# === CUBIST FOOTER STAMP END ===

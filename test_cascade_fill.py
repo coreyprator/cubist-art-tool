@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: test_cascade_fill.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:03
+# === CUBIST STAMP END ===
 """
 Test script for CascadeFill functionality
 """
@@ -81,3 +89,6 @@ if __name__ == "__main__":
     print("Testing CascadeFill functionality...")
     test_cascade_modes()
     print("\nTesting complete!")
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:03
+# === CUBIST FOOTER STAMP END ===

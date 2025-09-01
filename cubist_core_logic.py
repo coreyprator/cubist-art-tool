@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: cubist_core_logic.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:03
+# === CUBIST STAMP END ===
 # ======================================================================
 # File: cubist_core_logic.py
 # Stamp: 2025-08-22T13:51:03Z
@@ -639,3 +647,6 @@ __all__ = [
 # ======================================================================
 # End of File: cubist_core_logic.py  (2025-08-22T13:51:03Z)
 # ======================================================================
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:03
+# === CUBIST FOOTER STAMP END ===

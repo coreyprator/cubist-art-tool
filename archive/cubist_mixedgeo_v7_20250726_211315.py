@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: archive/cubist_mixedgeo_v7_20250726_211315.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:05
+# === CUBIST STAMP END ===
 import cv2
 import numpy as np
 from scipy.spatial import Delaunay, Voronoi
@@ -85,3 +93,6 @@ canvas_bgra[:, :, 3] = alpha
 output_path = f"frame_{frame:02d}_{len(points):05d}pts.png"
 cv2.imwrite(output_path, canvas_bgra)
 print(f"Saved: {os.path.abspath(output_path)}")
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# === CUBIST FOOTER STAMP END ===

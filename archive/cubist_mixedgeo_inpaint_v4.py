@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: archive/cubist_mixedgeo_inpaint_v4.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:04
+# === CUBIST STAMP END ===
 import cv2
 import numpy as np
 from scipy.spatial import Delaunay, Voronoi
@@ -134,3 +142,6 @@ if np.any(void_mask_dilated):
 frame_path = f"frame_{FRAME:02d}_{POINT_COUNT:05d}pts.png"
 cv2.imwrite(frame_path, cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR))
 print(f"Saved: {os.path.abspath(frame_path)} (final image)")
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:04
+# === CUBIST FOOTER STAMP END ===

@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: scripts/legacy_tests/test_continue_tutorial.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:06
+# === CUBIST STAMP END ===
 import argparse
 import sys
 import os
@@ -423,3 +431,6 @@ def _enforce_metrics_contract(
         return metrics
 
         sys.exit(2)
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:06
+# === CUBIST FOOTER STAMP END ===

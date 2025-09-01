@@ -58,3 +58,11 @@ input/*
 *.pyc
 *.pyo
 *.pyd
+
+# Release smoke outputs
+tmp_release_smoke/
+
+# Release smoke outputs
+tmp_release_smoke/
+__pycache__/
+*.pyc

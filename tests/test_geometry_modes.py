@@ -1,3 +1,16 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: tests/test_geometry_modes.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:05
+# === CUBIST STAMP END ===
+# ======================================================================
+# File: test_geometry_modes.py
+# Stamp: 2025-08-22T17:31:37Z
+# (Auto-added header for paste verification)
+# ======================================================================
 # test_geometry_modes.py
 
 
@@ -81,3 +94,9 @@ for mask_setting, mask_label in [(None, "no mask"), (MASK_PATH, "with mask")]:
             log_message(f"Finished geometry mode: {mode} ({mask_label})")
 
 log_message("All geometry tests complete.")
+# ======================================================================
+# End of File: test_geometry_modes.py  (2025-08-22T17:31:37Z)
+# ======================================================================
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# === CUBIST FOOTER STAMP END ===

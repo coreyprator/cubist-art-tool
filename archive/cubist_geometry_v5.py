@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: archive/cubist_geometry_v5.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:04
+# === CUBIST STAMP END ===
 import cv2
 import numpy as np
 from scipy.spatial import Delaunay, Voronoi
@@ -101,3 +109,6 @@ if USE_MIXED_GEOMETRY:
 frame_name = f"frame_{frame:02d}_{TOTAL_POINTS:05d}pts.png"
 cv2.imwrite(frame_name, cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR))
 print(f"Saved final output: {os.path.abspath(frame_name)}")
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:04
+# === CUBIST FOOTER STAMP END ===

@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: archive/cubist_mixedgeo_inpaint_v2.py.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:04
+# === CUBIST STAMP END ===
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -421,3 +429,6 @@ print(f"Done in {done_minutes}m {done_secs}s.")
 # To control the frame generation:
 # - Set single_frame_mode = True and adjust point_target for a single frame at a specific point count.
 # - Set single_frame_mode = False and adjust num_frames, base_point, and factor for geometric progression.
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:04
+# === CUBIST FOOTER STAMP END ===

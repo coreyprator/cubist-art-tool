@@ -49,6 +49,44 @@ python cubist_cli.py --geometry hex --input input\your_input_image.jpg --output 
 - Registry discovery test
 - Minimal plugin unit test
 
+## Current Limitations (Initial v2.3)
+
+- Plugins can be discovered and selected by name using `--geometry <plugin_name>`.
+- In this initial v2.3 release, plugin geometry is **not executed**. If a plugin is selected, the CLI prints an audit notice and falls back to the built-in `rectangles` mode to ensure production stability.
+- Execution of plugin geometry will be enabled in a follow-up PR after additional parity and safety checks.
+
+## Determinism in the Cubist Art Tool
+
+- **Definition:** Given the same image, parameters (e.g., points, geometry), and seed, the tool must always produce identical geometry and metrics, regardless of time, machine, or OS.
+- **Why we care:** Reproducible artwork (a saved seed regenerates the same visual), stable tests and metrics (no flaky CI), cross-platform consistency, and plugin discipline.
+- **Python/NumPy practice:** Use seeded RNGs (`np.random.default_rng(seed)` or `random.seed(seed)`), avoid time-based entropy or unseeded random calls.
+- **Plugin checklist:**
+  - Accept and honor a `seed` parameter.
+  - Avoid system clock or OS entropy.
+  - Ensure outputs are pure functions of `(image_shape, total_points, seed)`.
+  - Sanity test: same seed → identical output.
+
+By following these guidelines, plugin authors and contributors help maintain the Cubist Art Tool’s promise of reproducibility and reliability for all users.
+
+## Example: scatter_circles
+
+A deterministic plugin that scatters circles across the image using a stratified jitter grid. Each circle is placed in a grid cell with random jitter, and the color is sampled at the center. The output is a list of (cx, cy, r) tuples.
+
+```python
+# geometry_plugins/scatter_circles.py
+
+import math
+import random
+
+def geometry_fn(image_shape, total_points: int, seed: int):
+    # ...see plugin source for full details...
+    # Returns list of (cx, cy, r) ints.
+    pass
+
+def register(register_fn):
+    register_fn("scatter_circles", geometry_fn)
+```
+
 ---
 
 *See also: [README.md](../README.md)*

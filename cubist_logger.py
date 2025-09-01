@@ -1,3 +1,16 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: cubist_logger.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:03
+# === CUBIST STAMP END ===
+# ======================================================================
+# File: cubist_logger.py
+# Stamp: 2025-08-22T17:31:37Z
+# (Auto-added header for paste verification)
+# ======================================================================
 """
 Cubist Logger Utility
 Reusable logging setup for CLI, GUI, and tests.
@@ -54,3 +67,11 @@ def log_message(message, level="info"):
         logger.debug(message)
     else:
         logger.info(message)
+
+
+# ======================================================================
+# End of File: cubist_logger.py  (2025-08-22T17:31:37Z)
+# ======================================================================
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:03
+# === CUBIST FOOTER STAMP END ===

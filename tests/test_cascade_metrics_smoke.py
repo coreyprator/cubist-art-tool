@@ -1,6 +1,14 @@
-# ======================================================================
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
 # File: tests/test_cascade_metrics_smoke.py
-# Stamp: 2025-08-22T13:51:03Z
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:05
+# === CUBIST STAMP END ===
+# ======================================================================
+# File: test_cascade_metrics_smoke.py
+# Stamp: 2025-08-22T17:31:37Z
 # (Auto-added header for paste verification)
 # ======================================================================
 
@@ -130,11 +138,9 @@ def test_cascade_determinism_and_metrics() -> None:
         run_cmd(cmd3)
         j3 = json.loads(Path(m3).read_text(encoding="utf-8"))
         assert j3 != j1
-
 # ======================================================================
-# End of File: tests/test_cascade_metrics_smoke.py  (2025-08-22T00:00:00Z)
+# End of File: test_cascade_metrics_smoke.py  (2025-08-22T17:31:37Z)
 # ======================================================================
-
-# ======================================================================
-# End of File: tests/test_cascade_metrics_smoke.py  (2025-08-22T13:51:03Z)
-# ======================================================================
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# === CUBIST FOOTER STAMP END ===

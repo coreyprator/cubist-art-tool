@@ -1,3 +1,16 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: tests/test_svg_input_smoke.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:05
+# === CUBIST STAMP END ===
+# ======================================================================
+# File: test_svg_input_smoke.py
+# Stamp: 2025-08-22T17:31:37Z
+# (Auto-added header for paste verification)
+# ======================================================================
 import tempfile
 import sys
 import subprocess
@@ -38,3 +51,9 @@ def test_svg_input_minimal_triangle():
         svg_outs = list(out_dir.glob("*.svg"))
         assert svg_outs, "No SVG output found"
         assert svg_outs[0].stat().st_size > 100, "SVG output too small"
+# ======================================================================
+# End of File: test_svg_input_smoke.py  (2025-08-22T17:31:37Z)
+# ======================================================================
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# === CUBIST FOOTER STAMP END ===

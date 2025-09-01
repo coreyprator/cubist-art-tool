@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: archive/cubist_ui_launcher.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:05
+# === CUBIST STAMP END ===
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from cubist_main_v7_refactored import run_cubist
@@ -63,3 +71,6 @@ tk.Button(root, text="Run Cubist Generator", command=run_wrapper).grid(
 )
 
 root.mainloop()
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# === CUBIST FOOTER STAMP END ===

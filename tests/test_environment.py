@@ -1,3 +1,16 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: tests/test_environment.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:05
+# === CUBIST STAMP END ===
+# ======================================================================
+# File: test_environment.py
+# Stamp: 2025-08-22T17:31:37Z
+# (Auto-added header for paste verification)
+# ======================================================================
 """
 Basic environment sanity checks for the Cubist Art project.
 
@@ -41,3 +54,9 @@ def test_optional_deps_are_tolerated():
         except Exception:
             # Optional or environment-specific; do not fail the build.
             pass
+# ======================================================================
+# End of File: test_environment.py  (2025-08-22T17:31:37Z)
+# ======================================================================
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# === CUBIST FOOTER STAMP END ===

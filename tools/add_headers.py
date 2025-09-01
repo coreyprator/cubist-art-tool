@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: tools/add_headers.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:06
+# === CUBIST STAMP END ===
 # ======================================================================
 # File: tools/add_headers.py
 # Stamp: 2025-08-22T00:00:00Z
@@ -61,3 +69,6 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:06
+# === CUBIST FOOTER STAMP END ===

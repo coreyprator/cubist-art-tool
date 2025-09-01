@@ -1,3 +1,16 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: tests/test_cli.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:05
+# === CUBIST STAMP END ===
+# ======================================================================
+# File: test_cli.py
+# Stamp: 2025-08-22T17:31:37Z
+# (Auto-added header for paste verification)
+# ======================================================================
 """
 CLI smoke tests.
 
@@ -32,3 +45,9 @@ def test_cli_help_subprocess(tmp_path: Path):
     # --help should print usage and exit 0
     assert proc.returncode == 0
     assert "usage:" in proc.stdout.lower() or "usage:" in proc.stderr.lower()
+# ======================================================================
+# End of File: test_cli.py  (2025-08-22T17:31:37Z)
+# ======================================================================
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# === CUBIST FOOTER STAMP END ===

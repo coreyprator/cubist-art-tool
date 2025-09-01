@@ -1,3 +1,16 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: metrics_utils.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:04
+# === CUBIST STAMP END ===
+# ======================================================================
+# File: metrics_utils.py
+# Stamp: 2025-08-22T17:31:37Z
+# (Auto-added header for paste verification)
+# ======================================================================
 import os
 import re
 
@@ -80,3 +93,11 @@ def stabilize_metrics(metrics: dict) -> dict:
         return stable_metrics_any(metrics)
     except Exception:
         return metrics
+
+
+# ======================================================================
+# End of File: metrics_utils.py  (2025-08-22T17:31:37Z)
+# ======================================================================
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:04
+# === CUBIST FOOTER STAMP END ===

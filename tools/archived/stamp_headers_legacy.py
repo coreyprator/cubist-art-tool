@@ -1,3 +1,16 @@
+# DEPRECATED — DO NOT USE
+# This header stamper is superseded by tools/stamp_repo.py.
+# Kept only for history / reproducibility.
+
+
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: tools/stamp_headers.py
+# Version: v2.3.4
+# Build: 2025-09-01T08:25:00
+# Commit: n/a
+# Stamped: 2025-09-01T08:36:06
+# === CUBIST STAMP END ===
 import argparse
 import pathlib
 import time
@@ -129,3 +142,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file — v2.3.4 — stamped 2025-09-01T08:36:06
+# === CUBIST FOOTER STAMP END ===
