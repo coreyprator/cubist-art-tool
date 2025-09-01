@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: docs/timeline.md
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:31+02:00
+# === CUBIST STAMP END ===
 # Timeline Scrubber & Animation Export
 
 **Status:** v2.3 feature (planned)
@@ -38,3 +46,7 @@ python cubist_cli.py --input input\your_input_image.jpg --output output\animtest
 ---
 
 *See also: [README.md](../README.md)*
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:31+02:00
+# === CUBIST FOOTER STAMP END ===

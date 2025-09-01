@@ -1,11 +1,12 @@
 # === CUBIST STAMP BEGIN ===
 # Project: Cubist Art
 # File: versioning.py
-# Version: v2.3.6
-# Build: 2025-09-01T09:20:00
-# Commit: n/a
-# Stamped: 2025-09-01T09:20:00
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:29+02:00
 # === CUBIST STAMP END ===
+
 from __future__ import annotations
 
 import os
@@ -76,6 +77,7 @@ if __name__ == "__main__":
     prog = os.path.basename(sys.argv[0]).split(".")[0]
     print_banner(prog)
 
+
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.6 - stamped 2025-09-01T09:20:00
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:29+02:00
 # === CUBIST FOOTER STAMP END ===

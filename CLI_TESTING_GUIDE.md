@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: CLI_TESTING_GUIDE.md
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:28+02:00
+# === CUBIST STAMP END ===
 # Cubist Art CLI Testing Guide
 
 ## 🚀 Quick Start
@@ -238,3 +246,7 @@ Choose your preferred method:
 3. **VS Code:** Ctrl+Shift+P → Tasks → "Test All Geometries (CLI)"
 
 Happy testing! 🎨
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:28+02:00
+# === CUBIST FOOTER STAMP END ===

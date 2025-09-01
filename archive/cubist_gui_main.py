@@ -1,11 +1,12 @@
 # === CUBIST STAMP BEGIN ===
 # Project: Cubist Art
 # File: archive/cubist_gui_main.py
-# Version: v2.3.4
-# Build: 2025-09-01T08:25:00
-# Commit: n/a
-# Stamped: 2025-09-01T08:36:05
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:30+02:00
 # === CUBIST STAMP END ===
+
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -113,6 +114,8 @@ tk.Checkbutton(root, text="Clip to Alpha", variable=clip_var).grid(row=3, column
 tk.Button(root, text="Generate", command=run_cubist).grid(row=4, column=1, pady=10)
 
 root.mainloop()
+
+
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:30+02:00
 # === CUBIST FOOTER STAMP END ===

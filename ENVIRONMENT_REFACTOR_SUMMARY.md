@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: ENVIRONMENT_REFACTOR_SUMMARY.md
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:27+02:00
+# === CUBIST STAMP END ===
 # Python Environment Refactoring - Complete
 
 ## Summary of Changes
@@ -135,3 +143,7 @@ The Cubist Art project now uses a clean, isolated Python environment that:
 - Follows Python best practices
 
 **To get started: Run `setup_env.bat`, then `launch_vscode.bat`**
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:27+02:00
+# === CUBIST FOOTER STAMP END ===

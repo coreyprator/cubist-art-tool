@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: docs/production-run.md
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:31+02:00
+# === CUBIST STAMP END ===
 # Production Batch Runs with Cubist Art Generator
 
 ## Overview
@@ -153,3 +161,7 @@ powershell -ExecutionPolicy Bypass -File scripts\run_production.ps1 `
   PNG and SVG files are reliably written to the expected run subdirectories.
 - **Production script improvements:**
   Batch runs across geometries, seeds, and cascade stages are now supported, with consolidated error handling and deterministic metrics for easy comparison.
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:31+02:00
+# === CUBIST FOOTER STAMP END ===

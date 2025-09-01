@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: launch_vscode.ps1
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:27+02:00
+# === CUBIST STAMP END ===
 # Cubist Art Project - VS Code Launcher with Local .venv
 # PowerShell version of the launcher
 
@@ -56,3 +64,7 @@ Write-Host "Launching VS Code with project environment..." -ForegroundColor Gree
 code .
 
 Write-Host "VS Code launched. You can close this window." -ForegroundColor Green
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:27+02:00
+# === CUBIST FOOTER STAMP END ===

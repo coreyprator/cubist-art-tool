@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: RELEASE_NOTES_V2.1.0.0.md
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:29+02:00
+# === CUBIST STAMP END ===
 # v2.1.0 — PNG/SVG lockstep + validation 🥳
 
 ## Highlights
@@ -22,3 +30,7 @@ python test_cli.py `
   --export-svg `
   --seed 42 `
   --timeout-seconds 120
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:29+02:00
+# === CUBIST FOOTER STAMP END ===

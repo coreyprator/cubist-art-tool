@@ -1,11 +1,12 @@
 # === CUBIST STAMP BEGIN ===
 # Project: Cubist Art
 # File: tests/test_scatter_circles.py
-# Version: v2.3.4
-# Build: 2025-09-01T08:25:00
-# Commit: n/a
-# Stamped: 2025-09-01T08:36:05
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:32+02:00
 # === CUBIST STAMP END ===
+
 # =============================================================================
 # Cubist Art Tool — Scatter Circles Plugin Tests
 # File: tests/test_scatter_circles.py
@@ -66,6 +67,8 @@ def test_scatter_circles_plugin_exec(tmp_path):
     svg = list(out_dir.glob("*.svg"))
     assert len(png) == 1
     assert len(svg) == 1
+
+
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:32+02:00
 # === CUBIST FOOTER STAMP END ===

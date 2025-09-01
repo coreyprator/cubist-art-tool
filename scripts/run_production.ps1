@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: scripts/run_production.ps1
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:32+02:00
+# === CUBIST STAMP END ===
 <#  run_production.ps1
     Batch runner for cubist_cli.py across geometries/stages/seeds.
 
@@ -286,3 +294,7 @@ if (Test-Path -LiteralPath $rootErrLog) {
 } else {
   Write-Host "Consolidated errors:  (file not created)"
 }
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:32+02:00
+# === CUBIST FOOTER STAMP END ===

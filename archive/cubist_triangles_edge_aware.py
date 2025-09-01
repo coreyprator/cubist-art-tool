@@ -1,11 +1,12 @@
 # === CUBIST STAMP BEGIN ===
 # Project: Cubist Art
 # File: archive/cubist_triangles_edge_aware.py
-# Version: v2.3.4
-# Build: 2025-09-01T08:25:00
-# Commit: n/a
-# Stamped: 2025-09-01T08:36:05
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:30+02:00
 # === CUBIST STAMP END ===
+
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -429,6 +430,8 @@ print(f"Done in {done_minutes}m {done_secs}s.")
 # To control the frame generation:
 # - Set single_frame_mode = True and adjust point_target for a single frame at a specific point count.
 # - Set single_frame_mode = False and adjust num_frames, base_point, and factor for geometric progression.
+
+
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:30+02:00
 # === CUBIST FOOTER STAMP END ===

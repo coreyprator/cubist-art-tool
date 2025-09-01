@@ -1,11 +1,12 @@
 # === CUBIST STAMP BEGIN ===
 # Project: Cubist Art
 # File: archive/cubist_main_v7_refactored.py
-# Version: v2.3.4
-# Build: 2025-09-01T08:25:00
-# Commit: n/a
-# Stamped: 2025-09-01T08:36:05
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:30+02:00
 # === CUBIST STAMP END ===
+
 import os
 import cv2
 import numpy as np
@@ -58,6 +59,8 @@ def run_cubist(input_path, output_dir, total_points=1000, clip_to_alpha=True):
     out_path = os.path.join(output_dir, f"frame_01_{suffix}pts.png")
     cv2.imwrite(out_path, cv2.cvtColor(canvas, cv2.COLOR_RGB2BGR))
     print(f"Saved: {out_path}")
+
+
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:30+02:00
 # === CUBIST FOOTER STAMP END ===

@@ -1,11 +1,12 @@
 # === CUBIST STAMP BEGIN ===
 # Project: Cubist Art
 # File: archive/cubist_core_logic.py
-# Version: v2.3.4
-# Build: 2025-09-01T08:25:00
-# Commit: n/a
-# Stamped: 2025-09-01T08:36:05
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:30+02:00
 # === CUBIST STAMP END ===
+
 import os
 import cv2
 import numpy as np
@@ -46,6 +47,8 @@ def run_cubist_pipeline(
     except Exception as e:
         print(f"[ERROR] {e}")
         return None
+
+
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file — v2.3.4 — stamped 2025-09-01T08:36:05
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:30+02:00
 # === CUBIST FOOTER STAMP END ===

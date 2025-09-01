@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: docs/powershell-upgrade.md
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:31+02:00
+# === CUBIST STAMP END ===
 # PowerShell Version Guidance for Cubist Art Tool
 
 ## Why upgrade PowerShell?
@@ -53,3 +61,7 @@ If you see errors like:
 
 **Summary:**
 Upgrading to PowerShell 7+ is recommended for modern scripting and compatibility with advanced features used in this project.
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:31+02:00
+# === CUBIST FOOTER STAMP END ===

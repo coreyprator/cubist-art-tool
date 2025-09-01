@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: NEXT_STEPS.md
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:29+02:00
+# === CUBIST STAMP END ===
 # Next Steps to Finalize and Publish v2.2.3
 
 1. **Run all tests (must pass):**
@@ -88,3 +96,7 @@ git commit -m "chore: apply pre-commit/preflight auto-fixes to legacy and archiv
 pre-commit run --all-files
 ```
 Repeat until all hooks pass.
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:29+02:00
+# === CUBIST FOOTER STAMP END ===

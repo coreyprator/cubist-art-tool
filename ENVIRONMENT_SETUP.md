@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: ENVIRONMENT_SETUP.md
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:27+02:00
+# === CUBIST STAMP END ===
 # Environment Setup Guide
 
 ## Project-Specific Python Environment
@@ -117,3 +125,7 @@ If you previously used a global environment at `C:\Users\Owner\venv`, you can sa
 - `launch_vscode.bat` - Launch VS Code with environment validation and auto-setup
 - `run_tests.bat` - Run all tests using pytest with comprehensive options
 - `export_requirements.bat` - Export current environment to requirements.txt with backup
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:27+02:00
+# === CUBIST FOOTER STAMP END ===

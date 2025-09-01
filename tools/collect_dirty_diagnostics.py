@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: tools/collect_dirty_diagnostics.py
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:34+02:00
+# === CUBIST STAMP END ===
 # =============================================================================
 # Cubist Art — Dirty Tree Diagnostics (read-only)
 # File: tools/collect_dirty_diagnostics.py
@@ -301,3 +309,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:34+02:00
+# === CUBIST FOOTER STAMP END ===

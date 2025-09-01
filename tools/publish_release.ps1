@@ -1,3 +1,11 @@
+# === CUBIST STAMP BEGIN ===
+# Project: Cubist Art
+# File: tools/publish_release.ps1
+# Version: v2.3.7
+# Build: 2025-09-01T11:18:25
+# Commit: 374dfa9
+# Stamped: 2025-09-01T11:18:33+02:00
+# === CUBIST STAMP END ===
 <#
 ===============================================================================
  Cubist Art — Release Publisher (with Ruff + Prod Smoke gate)
@@ -307,3 +315,7 @@ if (-not $NoRelease -and (Has-GH)) {
 
 TS "[done] Published $Version on branch $Branch"
 exit 0
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:33+02:00
+# === CUBIST FOOTER STAMP END ===

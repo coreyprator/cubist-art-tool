@@ -1,177 +1,242 @@
-# === CUBIST STAMP BEGIN ===
-# Project: Cubist Art
-# File: tools/stamp_repo.py
-# Version: v2.3.6
-# Build: 2025-09-01T09:20:00
-# Commit: n/a
-# Stamped: 2025-09-01T09:20:00
-# === CUBIST STAMP END ===
+#!/usr/bin/env python3
+"""
+Stamp headers and footers across the repo.
+
+- Preserves original line endings (\n vs \r\n) per file.
+- Inserts after a shebang if present.
+- Idempotent: updates existing stamp blocks or adds them if missing.
+- Skips common build/cache/output folders.
+- **Self-protects**: never stamps this file (tools/stamp_repo.py) or any file
+  that defines HEADER_BEGIN/FOOTER_BEGIN as Python variables.
+"""
+
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+import datetime as _dt
+import os
+import re
+import subprocess
 from pathlib import Path
-from typing import Iterable, Tuple
+from typing import Iterable
+
+# --- Constants ----------------------------------------------------------------
 
 HEADER_BEGIN = "# === CUBIST STAMP BEGIN ==="
 HEADER_END = "# === CUBIST STAMP END ==="
+
 FOOTER_BEGIN = "# === CUBIST FOOTER STAMP BEGIN ==="
 FOOTER_END = "# === CUBIST FOOTER STAMP END ==="
 
-# Directories to skip entirely
-EXCLUDE_DIRS = {
-    ".venv",
-    "__pycache__",
+# Directories to skip entirely (by name)
+SKIP_DIRS = {
     ".git",
-    "build",
-    "dist",
-    "output",
-    "logs",
+    ".venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
     ".idea",
     ".vscode",
-    ".pytest_cache",
+    "node_modules",
+    "__pycache__",
+    "output",
+    "outputs",
+    "logs",
+    "build",
+    "dist",
+    "tmp",
+    "tmp_release_smoke",
+    "Archived Output",
 }
 
-# Additional glob-style directory name fragments to skip if found in a path
-EXCLUDE_FRAGMENTS = {"Archived Output"}
+# Individual files to skip (repo-relative POSIX paths)
+SKIP_FILES = {
+    "tools/stamp_repo.py",  # <- self-protection
+    "tools/archived/stamp_headers_legacy.py",
+}
+
+# File extensions to stamp
+DEFAULT_EXTS = {".py", ".ps1", ".md"}
+
+# Precompiled patterns to find existing blocks
+_HEADER_RE = re.compile(
+    rf"{re.escape(HEADER_BEGIN)}.*?{re.escape(HEADER_END)}\r?\n?", re.DOTALL
+)
+_FOOTER_RE = re.compile(
+    rf"{re.escape(FOOTER_BEGIN)}.*?{re.escape(FOOTER_END)}\r?\n?", re.DOTALL
+)
 
 
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+# --- Helpers ------------------------------------------------------------------
 
 
-def _replace_region(
-    text: str, begin: str, end: str, replacement: str
-) -> Tuple[str, bool]:
-    if begin in text and end in text:
-        pre, rest = text.split(begin, 1)
-        _, post = rest.split(end, 1)
-        return pre + replacement + post, True
-    return text, False
+def _now_iso() -> str:
+    # Always second precision (stable for diffs)
+    return _dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
 
 
-def _has_shebang(text: str) -> bool:
-    return text.startswith("#!")
+def _get_git_commit(root: Path) -> str:
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=str(root)
+        )
+        return out.decode("utf-8", "replace").strip()
+    except Exception:
+        return "n/a"
 
 
-def _make_header(
-    rel_path: str, version: str, build_ts: str, commit: str | None, stamped: str
+def _line_ending_for(text: str) -> str:
+    # Simple and reliable: if CRLF exists anywhere, keep CRLF, else LF
+    return "\r\n" if "\r\n" in text else "\n"
+
+
+def _relpath(p: Path, root: Path) -> str:
+    try:
+        return str(p.relative_to(root).as_posix())
+    except Exception:
+        return p.name
+
+
+def _should_skip_dir(dirpath: Path) -> bool:
+    return dirpath.name in SKIP_DIRS
+
+
+def _iter_files(root: Path, exts: set[str]) -> Iterable[Path]:
+    for dp, dn, fn in os.walk(root):
+        dp_path = Path(dp)
+        # prune directories in-place to avoid walking them
+        dn[:] = [d for d in dn if not _should_skip_dir(dp_path / d)]
+        for name in fn:
+            p = dp_path / name
+            if p.suffix.lower() in exts:
+                yield p
+
+
+def _build_header(
+    relpath: str, version: str, build_ts: str, commit: str, nl: str
 ) -> str:
-    lines = [
+    # Separate "header block" from the rest with an extra newline after END.
+    parts = [
         HEADER_BEGIN,
         "# Project: Cubist Art",
-        f"# File: {rel_path}",
+        f"# File: {relpath}",
         f"# Version: {version}",
         f"# Build: {build_ts}",
-        f"# Commit: {commit or 'n/a'}",
-        f"# Stamped: {stamped}",
+        f"# Commit: {commit}",
+        f"# Stamped: {_now_iso()}",
         HEADER_END,
-        "",
+        "",  # blank line after header
     ]
-    return "\n".join(lines)
+    return nl.join(parts)
 
 
-def _make_footer(version: str, stamped: str) -> str:
-    lines = [
-        "",
+def _build_footer(version: str, nl: str) -> str:
+    parts = [
+        "",  # ensure a newline before footer block
         FOOTER_BEGIN,
-        f"# End of file - {version} - stamped {stamped}",
+        f"# End of file - {version} - stamped {_now_iso()}",
         FOOTER_END,
-        "",
+        "",  # final newline at end of file
     ]
-    return "\n".join(lines)
+    return nl.join(parts)
 
 
-def _should_skip(path: Path) -> bool:
-    parts = {p.lower() for p in path.parts}
-    if any(ex.lower() in parts for ex in EXCLUDE_DIRS):
-        return True
-    if any(
-        fragment.lower() in ("/".join(path.parts)).lower()
-        for fragment in EXCLUDE_FRAGMENTS
-    ):
+def _insert_after_shebang(text: str, insert_block: str, nl: str) -> str:
+    if text.startswith("#!"):
+        first, _, rest = text.partition(nl)
+        return first + nl + insert_block + rest
+    return insert_block + text
+
+
+def _should_skip_file_by_content(path: Path, raw: str) -> bool:
+    """
+    Skip any file that defines HEADER_BEGIN/FOOTER_BEGIN variables (like this script),
+    so our marker text inside string literals is never replaced.
+    """
+    if "HEADER_BEGIN =" in raw or "FOOTER_BEGIN =" in raw:
         return True
     return False
 
 
-def iter_py_files(root: Path) -> Iterable[Path]:
-    for p in root.rglob("*.py"):
-        if _should_skip(p):
-            continue
-        yield p
-
-
-def stamp_file(
-    path: Path, repo_root: Path, version: str, build_ts: str, commit: str | None
+def _stamp_one_file(
+    path: Path, root: Path, version: str, build_ts: str, commit: str, dry_run: bool
 ) -> bool:
-    rel = str(path.relative_to(repo_root)).replace("\\", "/")
-    original = path.read_text(encoding="utf-8", errors="ignore")
-    stamped_ts = _now()
+    """
+    Returns True if file was changed.
+    """
+    raw = path.read_text(encoding="utf-8", errors="ignore")
+    nl = _line_ending_for(raw)
+    rel = _relpath(path, root)
 
-    header = _make_header(rel, version, build_ts, commit, stamped_ts)
-    footer = _make_footer(version, stamped_ts)
+    # Self-protection: skip this stamper (or any file on the explicit skip list)
+    if rel in SKIP_FILES or _should_skip_file_by_content(path, raw):
+        return False
+
+    # Build new header/footer blocks with the file's newline style.
+    new_header = _build_header(rel, version, build_ts, commit, nl)
+    new_footer = _build_footer(version, nl)
 
     # Replace or insert header
-    updated, replaced_header = _replace_region(
-        original, HEADER_BEGIN, HEADER_END, header
-    )
-    if not replaced_header:
-        if _has_shebang(updated):
-            first_nl = updated.find("\n")
-            first_nl = first_nl if first_nl >= 0 else 0
-            updated = updated[: first_nl + 1] + header + updated[first_nl + 1 :]
-        else:
-            updated = header + updated
+    if _HEADER_RE.search(raw):
+        raw2 = _HEADER_RE.sub(new_header, raw, count=1)
+    else:
+        raw2 = _insert_after_shebang(raw, new_header, nl)
 
     # Replace or append footer
-    updated2, replaced_footer = _replace_region(
-        updated, FOOTER_BEGIN, FOOTER_END, footer
-    )
-    if replaced_footer:
-        updated = updated2
+    if _FOOTER_RE.search(raw2):
+        raw3 = _FOOTER_RE.sub(new_footer, raw2, count=1)
     else:
-        if not updated.endswith("\n"):
-            updated += "\n"
-        updated = updated + footer
+        # ensure single trailing newline before appending footer
+        if not raw2.endswith(nl):
+            raw2 = raw2 + nl
+        raw3 = raw2 + new_footer
 
-    if updated != original:
-        path.write_text(updated, encoding="utf-8")
-        return True
-    return False
+    changed = raw3 != raw
+    if changed and not dry_run:
+        # Write back exactly what we constructed (content contains the intended NLs)
+        path.write_text(raw3, encoding="utf-8", newline="")
+    return changed
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Stamp all Python files with version/date header and footer."
+# --- CLI ---------------------------------------------------------------------
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Stamp repo headers/footers.")
+    ap.add_argument("--version", required=True, help="Semantic version like v2.3.7")
+    ap.add_argument(
+        "--build-ts",
+        required=True,
+        help="Build timestamp (e.g. 2025-09-01T11:11:06)",
     )
-    parser.add_argument("--version", required=True, help="Version string, e.g. v2.3.6")
-    parser.add_argument(
-        "--build-ts", default=None, help="Build ISO timestamp (default: now)"
+    ap.add_argument(
+        "--root", default=".", help="Repository root (default: current directory)"
     )
-    parser.add_argument("--commit", default=None, help="Commit short hash (optional)")
-    parser.add_argument(
-        "--root", default=".", help="Repo root (default: current directory)"
+    ap.add_argument(
+        "--ext",
+        action="append",
+        dest="exts",
+        help=f"Extra extension to include (defaults: {', '.join(sorted(DEFAULT_EXTS))})",
     )
-    args = parser.parse_args()
+    ap.add_argument("--dry-run", action="store_true", help="Report only; no writes")
+    args = ap.parse_args()
 
     root = Path(args.root).resolve()
-    version = args.version
-    build_ts = args.build_ts or _now()
-    commit = args.commit
+    exts = set(DEFAULT_EXTS)
+    if args.exts:
+        exts |= {("." + e.lstrip(".")).lower() for e in args.exts}
 
-    changed = 0
+    commit = _get_git_commit(root)
+
     total = 0
-    for fpath in iter_py_files(root):
+    changed = 0
+    for f in _iter_files(root, exts):
         total += 1
-        if stamp_file(fpath, root, version, build_ts, commit):
+        if _stamp_one_file(f, root, args.version, args.build_ts, commit, args.dry_run):
             changed += 1
-    print(f"[stamp_repo] stamped={changed} / {total} files under {root}", flush=True)
-    return 0
+
+    print("[stamp_repo] stamped={} / {} files under {}".format(changed, total, root))
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
-
-# === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.6 - stamped 2025-09-01T09:20:00
-# === CUBIST FOOTER STAMP END ===
+    main()
