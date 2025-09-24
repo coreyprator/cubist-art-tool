@@ -66,3 +66,33 @@ tmp_release_smoke/
 tmp_release_smoke/
 __pycache__/
 *.pyc
+
+# Ignore generated handoff artifacts
+/handoff/
+
+# Build/output
+/dist/
+/out/
+*.zip
+
+__pycache__/
+
+# Large handoff archives (specific to this project)
+cubist_art_v*.zip
+handoff/
+
+# PromptForge generated backups
+.backup/
+.pf/journal/
+*.tmp
+*.bak
+
+# Large handoff archives (specific to this project)
+cubist_art_v*.zip
+handoff/
+
+# PromptForge generated backups
+.backup/
+.pf/journal/
+*.tmp
+*.bak

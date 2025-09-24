@@ -1,675 +1,761 @@
-# === CUBIST STAMP BEGIN ===
-# Project: Cubist Art
-# File: tools/prod_ui.py
-# Version: v2.3.7
-# Build: 2025-09-01T13:31:41
-# Commit: 8163630
-# Stamped: 2025-09-01T13:31:49+02:00
-# === CUBIST STAMP END ===
-
+# tools/prod_ui.py
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import subprocess
-import sys
 import threading
 import time
+import webbrowser
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from flask import Flask, Response, jsonify, render_template_string, request, send_file
 
-import versioning  # unified banner/version
+# ---------------- Paths & constants ----------------
+ROOT = Path(__file__).resolve().parents[1]  # .../cubist_art
+TOOLS = ROOT / "tools"
+OUT_ROOT = ROOT / "output" / "production"
+PREFS_PATH = TOOLS / ".prod_ui_prefs.json"
+GEOMS = [
+    "delaunay",
+    "voronoi",
+    "rectangles",
+    "poisson_disk",
+    "scatter_circles",
+    "concentric_circles",
+]
 
-# ---------------------------- Paths & constants -----------------------------
+# ---------------- App state ----------------
+app = Flask(__name__)
+logging.getLogger("werkzeug").setLevel(logging.ERROR)  # suppress heartbeat GET noise
 
-HERE = Path(__file__).resolve()
-TOOLS_DIR = HERE.parent
-REPO_ROOT = TOOLS_DIR.parent
-CLI_WRAPPER = TOOLS_DIR / "run_cli.py"  # wrapper prints version banner
-CLI_PATH = REPO_ROOT / "cubist_cli.py"  # kept for diagnostics
-PLUGINS_DIR = REPO_ROOT / "geometry_plugins"
-OUTPUT_ROOT = REPO_ROOT / "output" / "production"
-CONFIGS_DIR = REPO_ROOT / "configs"
-CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
-CONFIG_PATH = CONFIGS_DIR / "prod_ui.json"
-LOG_DIR = REPO_ROOT / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-LOG_FILE = LOG_DIR / "prod_ui.log"
-
-# Hide plugins that aren't artistic/ready for production.
-PLUGIN_BLACKLIST = {"concentric_circles"}
-
-BUILTINS = ("delaunay", "voronoi", "rectangles")
+_LOGQ: "queue.Queue[str]" = queue.Queue()
+BUSY = False
+RUN_THREAD: threading.Thread | None = None
 
 
-def log(line: str) -> None:
-    stamp = datetime.now().isoformat(timespec="seconds")
-    text = f"{stamp} {line}"
-    print(text, flush=True)
-    try:
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(text + "\n")
-    except Exception:
-        pass
+def _now() -> str:
+    return datetime.now().strftime("%H:%M:%S")
 
 
-def discover_plugins_safely() -> List[str]:
-    """Import & list plugin names; never raise."""
-    try:
-        import geometry_registry as geom  # type: ignore
+def _log(line: str) -> None:
+    _LOGQ.put(f"[{_now()}] {line}")
 
+
+def _load_prefs() -> Dict[str, Any]:
+    if PREFS_PATH.exists():
         try:
-            geom.load_plugins(str(PLUGINS_DIR))
-        except Exception as e:
-            log(f"[prod_ui] load_plugins error: {e}")
-        get_names = getattr(geom, "names", None)
-        if callable(get_names):
-            names = list(get_names())
-        else:
-            reg = getattr(geom, "_registry", {}) or getattr(geom, "_REGISTRY", {})
-            names = sorted(reg.keys()) if isinstance(reg, dict) else []
-        # Filter
-        names = [n for n in names if n not in BUILTINS and n not in PLUGIN_BLACKLIST]
-        return sorted(names)
-    except Exception as e:
-        log(f"[prod_ui] discover_plugins exception: {e}")
-        return []
-
-
-def ts_folder(root: Path) -> Path:
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    p = root / stamp
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
-def startfile_cross(path: str | Path) -> None:
-    p = str(path)
-    try:
-        if sys.platform.startswith("win"):
-            os.startfile(p)  # type: ignore[attr-defined]
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", p])
-        else:
-            subprocess.Popen(["xdg-open", p])
-    except Exception as e:
-        log(f"[prod_ui] startfile error: {e}")
-
-
-def try_svg_to_png(
-    svg_path: Path,
-    png_path: Path,
-    width_hint: Optional[int] = None,
-    height_hint: Optional[int] = None,
-) -> bool:
-    """
-    Best-effort rasterization of SVG -> PNG so production runs have both.
-    Requires CairoSVG; if unavailable, we just return False.
-    """
-    try:
-        import cairosvg  # type: ignore
-    except Exception:
-        log("[prod_ui] NOTE: CairoSVG not installed; skipping SVG->PNG rasterization.")
-        return False
-    try:
-        png_path.parent.mkdir(parents=True, exist_ok=True)
-        if width_hint and height_hint:
-            cairosvg.svg2png(
-                url=str(svg_path),
-                write_to=str(png_path),
-                output_width=width_hint,
-                output_height=height_hint,
-            )
-        else:
-            cairosvg.svg2png(url=str(svg_path), write_to=str(png_path))
-        return True
-    except Exception as e:
-        log(f"[prod_ui] CairoSVG failed: {e}")
-        return False
-
-
-class RunnerThread(threading.Thread):
-    def __init__(
-        self,
-        queue_out: "queue.Queue[str]",
-        selections: List[Tuple[str, bool]],  # (geometry, is_plugin)
-        points: int,
-        seed: Optional[int],
-        cascade_stages: int,
-        export_svg: bool,
-        enable_plugin_exec: bool,
-        input_image: Optional[str],
-        output_root: Path,
-        svg_passthrough: bool,
-        input_svg: Optional[str],
-    ):
-        super().__init__(daemon=True)
-        self.queue_out = queue_out
-        self.selections = selections
-        self.points = points
-        self.seed = seed
-        self.cascade_stages = cascade_stages
-        self.export_svg = export_svg
-        self.enable_plugin_exec = enable_plugin_exec
-        self.input_image = input_image
-        self.output_root = output_root
-        self.svg_passthrough = svg_passthrough
-        self.input_svg = input_svg
-
-    def emit(self, line: str) -> None:
-        try:
-            self.queue_out.put_nowait(line.rstrip("\n"))
+            return json.loads(PREFS_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
 
-    def run_one(self, geom: str, is_plugin: bool, out_dir: Path) -> int:
-        py = sys.executable
-        wrapper = (
-            CLI_WRAPPER if CLI_WRAPPER.exists() else REPO_ROOT / "tools" / "run_cli.py"
-        )
-        cmd: List[str] = [py, str(wrapper)]
-        if self.svg_passthrough and self.input_svg and geom == "svg":
-            cmd += ["--input-svg", self.input_svg]
-        else:
-            if not self.input_image:
-                self.emit(f"[{geom}] ERROR: No input image selected.")
-                return 2
-            cmd += ["--input", self.input_image]
+    # Try to find a reasonable default input image
+    default_input = None
+    for candidate in ["your_input_image.jpg", "test_image.jpg", "sample.jpg"]:
+        test_path = ROOT / "input" / candidate
+        if test_path.exists():
+            default_input = str(test_path.resolve())
+            break
 
-        cmd += [
-            "--output",
-            str(out_dir),
-            "--geometry",
-            geom,
-            "--points",
-            str(self.points),
-        ]
-        if self.seed is not None:
-            cmd += ["--seed", str(self.seed)]
-        cmd += ["--cascade-stages", str(self.cascade_stages)]
-        if self.export_svg:
-            cmd += ["--export-svg"]
-        if self.enable_plugin_exec and is_plugin:
-            cmd += ["--enable-plugin-exec"]
+    if not default_input:
+        default_input = str((ROOT / "input" / "your_input_image.jpg").resolve())
 
-        self.emit(f"[{geom}] RUN: {' '.join(cmd)}")
-        try:
-            proc = subprocess.run(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-            )
-        except Exception as e:
-            self.emit(f"[{geom}] EXCEPTION: {e}")
-            return 2
+    return {
+        "input_image": default_input,
+        "points": 4000,
+        "seed": 42,
+        "cascade": 3,
+        "export_svg": True,
+        "enable_plugin_exec": True,
+        "verbose_probe": True,
+        "auto_open_gallery": True,
+        "geoms": GEOMS[:3],  # Start with working geometries only
+    }
 
-        out = proc.stdout or ""
-        for line in out.splitlines():
-            self.emit(f"[{geom}] {line}")
 
-        # Quick file audit
-        try:
-            pngs = sorted(list(out_dir.glob("*.png")))
-            svgs = sorted(list(out_dir.glob("*.svg")))
-            mets = sorted(list(out_dir.glob("*.json")))
-            self.emit(
-                f"[{geom}] files: png={len(pngs)} svg={len(svgs)} metrics={len(mets)}"
-            )
-            for p in pngs + svgs + mets:
-                self.emit(f"[{geom}] -> {p}")
-        except Exception:
-            pngs, svgs = [], []
+def _save_prefs(p: Dict[str, Any]) -> None:
+    try:
+        PREFS_PATH.write_text(json.dumps(p, indent=2), encoding="utf-8")
+    except Exception as e:
+        _log(f"[ui] WARNING: failed saving prefs: {e!r}")
 
-        # If no PNG but an SVG exists, try to rasterize SVG -> PNG (best-effort)
-        if not pngs and svgs:
-            guess = out_dir / f"{geom}.png"
-            width_hint = None
-            height_hint = None
-            if self.input_image:
+
+def _cmd_for_geom(geom: str, prefs: Dict[str, Any], out_dir: Path) -> List[str]:
+    """Build command for our working cubist_cli.py (not the old wrapper)"""
+    dest = out_dir / geom / f"frame_{geom}"
+    cmd = [
+        os.sys.executable,
+        str(ROOT / "cubist_cli.py"),  # Use our working CLI directly
+        "--input",
+        prefs["input_image"],
+        "--output",
+        str(dest),
+        "--geometry",
+        geom,
+        "--points",
+        str(prefs.get("points", 4000)),
+        "--seed",
+        str(prefs.get("seed", 42)),
+        "--cascade-stages",
+        str(prefs.get("cascade", 3)),
+    ]
+
+    # Add export-svg flag if enabled
+    if prefs.get("export_svg", True):
+        cmd.append("--export-svg")
+
+    # Add quiet flag for cleaner output
+    cmd.append("--quiet")
+
+    return cmd
+
+
+def _env_with_paths() -> Dict[str, str]:
+    """Add ROOT and ROOT/src to PYTHONPATH for subprocesses and probes."""
+    env = os.environ.copy()
+    sep = ";" if os.name == "nt" else ":"
+    extras = [str(ROOT)]
+    if (ROOT / "src").exists():
+        extras.append(str(ROOT / "src"))
+    extra = sep.join(extras)
+    env["PYTHONPATH"] = extra + (
+        sep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
+    return env
+
+
+def _completed_tail(
+    proc: subprocess.CompletedProcess, n: int = 12
+) -> Tuple[List[str], List[str]]:
+    out = (proc.stdout or "").splitlines()[-n:]
+    err = (proc.stderr or "").splitlines()[-n:]
+    return out, err
+
+
+def _parse_cli_json_output(stdout: str) -> Dict[str, Any]:
+    """Parse JSON output from our updated cubist_cli.py"""
+    if not stdout.strip():
+        return {}
+
+    try:
+        # The CLI now outputs clean JSON
+        return json.loads(stdout.strip())
+    except json.JSONDecodeError:
+        # Fallback: try to find JSON in the output
+        lines = stdout.strip().splitlines()
+        for line in reversed(lines):
+            line = line.strip()
+            if line.startswith("{") and line.endswith("}"):
                 try:
-                    from PIL import Image  # type: ignore
-
-                    with Image.open(self.input_image) as im:
-                        width_hint, height_hint = im.size
-                except Exception:
-                    pass
-            made = try_svg_to_png(svgs[0], guess, width_hint, height_hint)
-            if made:
-                self.emit(f"[{geom}] (post) SVG->PNG rasterized -> {guess}")
-
-        return proc.returncode
-
-    def run(self) -> None:
-        out_root = ts_folder(OUTPUT_ROOT)
-        self.emit(f"[ui] Output root: {out_root}")
-        rc_any = 0
-        for geom, is_plugin in self.selections:
-            subdir = out_root / geom
-            subdir.mkdir(parents=True, exist_ok=True)
-            rc_any |= self.run_one(geom, is_plugin, subdir)
-        if rc_any == 0:
-            self.emit("[ui] COMPLETE successfully.")
-        else:
-            self.emit("[ui] COMPLETE with errors.")
-        self.emit(f"[ui] OPEN_OUTPUT {out_root}")
+                    return json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+        return {}
 
 
-class ProdUI(tk.Tk):
-    def __init__(self):
-        super().__init__()
+def _write_gallery(out_dir: Path, results: List[Dict[str, Any]]) -> Path:
+    """Write gallery HTML with both local file:// URLs and web server URLs"""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    html = [
+        "<!doctype html><meta charset='utf-8'><title>Cubist — Run Summary</title>",
+        "<style>body{font:14px system-ui,Segoe UI,Tahoma,Arial;margin:22px} "
+        ".ok{color:#080}.err{color:#b00} a{color:#06c;text-decoration:none} a:hover{text-decoration:underline} "
+        ".preview{max-width:200px;max-height:150px;border:1px solid #ccc;margin:5px 0;background:#f9f9f9} "
+        ".gallery-info{background:#e3f2fd;padding:15px;border-radius:8px;margin-bottom:20px} "
+        ".switch-btn{padding:6px 12px;background:#2196f3;color:white;border:none;border-radius:4px;cursor:pointer;margin:0 5px}</style>",
+        "<div class='gallery-info'>",
+        f"<h2>🎨 {out_dir.name}</h2>",
+        "<p><strong>View Mode:</strong> <button class='switch-btn' onclick='switchToServer()'>Web Server View</button> ",
+        "<button class='switch-btn' onclick='location.reload()'>Refresh</button></p>",
+        f"<p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
+        "</div>",
+        "<ul>",
+    ]
 
-        # version banner at launch
-        versioning.print_banner("prod_ui")
+    success_count = 0
+    for r in results:
+        geom = r.get("geometry") or r.get("_geom") or "?"
+        outputs = r.get("outputs", {})
+        svg_exists = outputs.get("svg_exists", False)
 
-        self.title(f"Cubist Production Runner — {versioning.VERSION}")
-        self.geometry("1000x650")
-        self.minsize(900, 560)
+        if svg_exists:
+            svg_size = outputs.get("svg_size", 0)
+            svg_shapes = outputs.get("svg_shapes", 0)
+            svg_path = outputs.get("svg_path", "")
+            size_k = f"{svg_size/1024:.1f} KB"
 
-        # state
-        self.plugin_vars: Dict[str, tk.IntVar] = {}
-        self.builtin_vars: Dict[str, tk.IntVar] = {
-            b: tk.IntVar(value=1 if b == "delaunay" else 0) for b in BUILTINS
-        }
-        self.points_var = tk.StringVar(value="800")
-        self.seed_var = tk.StringVar(value="123")
-        self.cascade_var = tk.StringVar(value="3")
-        self.export_svg_var = tk.IntVar(value=1)
-        self.plugin_exec_var = tk.IntVar(value=1)
-        self.input_img_var = tk.StringVar(value="")
-        self.svg_passthrough_var = tk.IntVar(value=0)
-        self.input_svg_var = tk.StringVar(value="")
-        self.queue_out: "queue.Queue[str]" = queue.Queue()
-
-        # UI
-        self._build_ui()
-        self._bind_keys()
-
-        # show & bring front
-        self.after(10, self._present)
-
-        # async plugin scan and config load
-        self.after(50, self._start_async_discovery)
-        self.after(80, self._load_config_safe)
-        self.after(100, self._poll_queue)
-
-        # diags
-        log(f"[prod_ui] repo_root={REPO_ROOT}")
-        log(
-            f"[prod_ui] cli_wrapper={'OK' if CLI_WRAPPER.exists() else 'MISSING'} -> {CLI_WRAPPER}"
-        )
-        log(
-            f"[prod_ui] cli_path={'OK' if CLI_PATH.exists() else 'MISSING'} -> {CLI_PATH}"
-        )
-        log(
-            f"[prod_ui] plugins_dir={'OK' if PLUGINS_DIR.exists() else 'MISSING'} -> {PLUGINS_DIR}"
-        )
-        log(f"[prod_ui] logs -> {LOG_FILE}")
-
-    def _present(self):
-        try:
-            self.deiconify()
+            # Create both file:// URL for local viewing and web server URL
             try:
-                self.eval("tk::PlaceWindow . center")
-            except Exception:
-                pass
-            self.lift()
-            self.attributes("-topmost", True)
+                file_path = Path(svg_path).resolve()
+                file_url = file_path.as_uri()  # file:///path/to/file.svg
 
-            def _unset_topmost() -> None:
-                self.attributes("-topmost", False)
+                rel_path = file_path.relative_to(ROOT)
+                web_path = str(rel_path).replace("\\", "/")
+                web_url = f"http://127.0.0.1:5123/file?p={web_path}"
 
-            self.after(300, _unset_topmost)
-            log("[prod_ui] window presented")
-        except Exception as e:
-            log(f"[prod_ui] present error: {e}")
-
-    def _bind_keys(self):
-        self.bind_all("<Control-Shift-s>", lambda _e: self._toggle_dev_panel())
-
-    def _build_ui(self):
-        left = ttk.Frame(self)
-        left.pack(side=tk.LEFT, fill=tk.Y, padx=8, pady=8)
-
-        g_in = ttk.LabelFrame(left, text="Input")
-        g_in.pack(fill=tk.X, pady=(0, 8))
-        ttk.Label(g_in, text="Image:").grid(row=0, column=0, sticky="e")
-        ttk.Entry(g_in, textvariable=self.input_img_var, width=50).grid(
-            row=0, column=1, sticky="we", padx=4, pady=2
-        )
-        ttk.Button(g_in, text="Browse...", command=self._browse_image).grid(
-            row=0, column=2, padx=2
-        )
-
-        g_params = ttk.LabelFrame(left, text="Parameters")
-        g_params.pack(fill=tk.X, pady=(0, 8))
-        ttk.Label(g_params, text="Points:").grid(row=0, column=0, sticky="e")
-        ttk.Entry(g_params, textvariable=self.points_var, width=9).grid(
-            row=0, column=1, sticky="w", padx=4, pady=2
-        )
-        ttk.Label(g_params, text="Seed:").grid(row=1, column=0, sticky="e")
-        ttk.Entry(g_params, textvariable=self.seed_var, width=9).grid(
-            row=1, column=1, sticky="w", padx=4, pady=2
-        )
-        ttk.Label(g_params, text="Cascade Stages:").grid(row=2, column=0, sticky="e")
-        ttk.Entry(g_params, textvariable=self.cascade_var, width=9).grid(
-            row=2, column=1, sticky="w", padx=4, pady=2
-        )
-        ttk.Checkbutton(g_params, text="Export SVG", variable=self.export_svg_var).grid(
-            row=3, column=0, columnspan=2, sticky="w", padx=4
-        )
-        ttk.Checkbutton(
-            g_params,
-            text="Enable plugin exec (for plugins)",
-            variable=self.plugin_exec_var,
-        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=4)
-
-        g_bi = ttk.LabelFrame(left, text="Built-in geometries")
-        g_bi.pack(fill=tk.X, pady=(0, 8))
-        for i, name in enumerate(BUILTINS):
-            ttk.Checkbutton(g_bi, text=name, variable=self.builtin_vars[name]).grid(
-                row=i, column=0, sticky="w"
-            )
-
-        g_pl = ttk.LabelFrame(left, text="Discovered plugins")
-        g_pl.pack(fill=tk.BOTH, expand=False, pady=(0, 8))
-        self.plugins_container = ttk.Frame(g_pl)
-        self.plugins_container.pack(fill=tk.BOTH, expand=True)
-        self.plugins_hint = ttk.Label(
-            self.plugins_container, text="(Scanning plugins…)"
-        )
-        self.plugins_hint.pack(anchor="w")
-        btn_row = ttk.Frame(g_pl)
-        btn_row.pack(fill=tk.X)
-        ttk.Button(
-            btn_row, text="Refresh Plugins", command=self._start_async_discovery
-        ).pack(side=tk.LEFT)
-        ttk.Button(
-            btn_row, text="Select All", command=lambda: self._select_plugins(True)
-        ).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            btn_row, text="Select None", command=lambda: self._select_plugins(False)
-        ).pack(side=tk.LEFT)
-
-        g_act = ttk.LabelFrame(left, text="Actions")
-        g_act.pack(fill=tk.X, pady=(0, 8))
-        ttk.Button(g_act, text="Run Selected", command=self.run_selected).pack(
-            fill=tk.X, pady=2
-        )
-        ttk.Button(
-            g_act, text="Open Output Folder", command=self.open_output_root
-        ).pack(fill=tk.X, pady=2)
-        ttk.Button(g_act, text="Save Config", command=self.save_config).pack(
-            fill=tk.X, pady=2
-        )
-        ttk.Button(g_act, text="Load Config", command=self.load_config).pack(
-            fill=tk.X, pady=2
-        )
-        ttk.Button(
-            g_act, text="Clean Production Outputs…", command=self.clean_outputs
-        ).pack(fill=tk.X, pady=2)
-
-        self.dev_frame = ttk.LabelFrame(
-            left, text="Dev: SVG Passthrough (Ctrl+Shift+S)"
-        )
-        ttk.Checkbutton(
-            self.dev_frame,
-            text="Use SVG passthrough (geometry=svg)",
-            variable=self.svg_passthrough_var,
-        ).grid(row=0, column=0, columnspan=3, sticky="w")
-        ttk.Label(self.dev_frame, text="Input SVG:").grid(row=1, column=0, sticky="e")
-        ttk.Entry(self.dev_frame, textvariable=self.input_svg_var, width=42).grid(
-            row=1, column=1, sticky="w", padx=4
-        )
-        ttk.Button(self.dev_frame, text="Browse...", command=self._browse_svg).grid(
-            row=1, column=2, padx=2
-        )
-
-        right = ttk.Frame(self)
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=8, pady=8)
-        self.log = tk.Text(right, wrap="word", state="disabled")
-        self.log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        vsb = ttk.Scrollbar(right, orient="vertical", command=self.log.yview)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.log.configure(yscrollcommand=vsb.set)
-
-        self.status = ttk.Label(self, text="Ready.", anchor="w")
-        self.status.pack(side=tk.BOTTOM, fill=tk.X)
-
-    def _toggle_dev_panel(self):
-        if getattr(self, "dev_svg_visible", False):
-            self.dev_frame.pack_forget()
-            self.dev_svg_visible = False
-        else:
-            self.dev_frame.pack(fill=tk.X, pady=(0, 8))
-            self.dev_svg_visible = True
-
-    def _select_plugins(self, val: bool):
-        for var in self.plugin_vars.values():
-            var.set(1 if val else 0)
-
-    def _browse_image(self):
-        fpath = filedialog.askopenfilename(
-            title="Select input image",
-            filetypes=[("Images", "*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.webp;*.*")],
-        )
-        if fpath:
-            self.input_img_var.set(fpath)
-
-    def _browse_svg(self):
-        fpath = filedialog.askopenfilename(
-            title="Select input SVG",
-            filetypes=[("SVG", "*.svg"), ("All files", "*.*")],
-        )
-        if fpath:
-            self.input_svg_var.set(fpath)
-
-    def append_log(self, line: str):
-        self.log.configure(state="normal")
-        self.log.insert("end", line + "\n")
-        self.log.see("end")
-        self.log.configure(state="disabled")
-
-    def set_status(self, msg: str):
-        self.status.configure(text=msg)
-
-    def _poll_queue(self):
-        try:
-            while True:
-                line = self.queue_out.get_nowait()
-                if line.startswith("[ui] OPEN_OUTPUT "):
-                    _, _, p = line.partition("OPEN_OUTPUT ")
-                    self._last_output_root = p.strip()
-                else:
-                    self.append_log(line)
-        except queue.Empty:
-            pass
-        self.after(100, self._poll_queue)
-
-    def _start_async_discovery(self):
-        self.plugins_hint.configure(text="(Scanning plugins…)")
-
-        def worker():
-            names = discover_plugins_safely()
-            self.after(0, lambda: self._apply_plugins(names))
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _apply_plugins(self, names: List[str]):
-        for child in self.plugins_container.winfo_children():
-            child.destroy()
-        self.plugin_vars.clear()
-        if not names:
-            ttk.Label(self.plugins_container, text="(No plugins found)").pack(
-                anchor="w"
-            )
-        else:
-            for name in names:
-                var = tk.IntVar(value=0)
-                self.plugin_vars[name] = var
-                ttk.Checkbutton(self.plugins_container, text=name, variable=var).pack(
-                    anchor="w"
+            except (ValueError, OSError):
+                # Fallback if path operations fail
+                file_url = f"file:///{svg_path.replace(chr(92), '/')}"
+                web_url = (
+                    f"http://127.0.0.1:5123/file?p={svg_path.replace(chr(92), '/')}"
                 )
-        log(f"[prod_ui] plugins={names}")
 
-    def _load_config_safe(self):
-        try:
-            self.load_config()
-        except Exception as e:
-            log(f"[prod_ui] load_config error: {e}")
-
-    def _collect_selections(self) -> List[Tuple[str, bool]]:
-        sel: List[Tuple[str, bool]] = []
-        for name, var in self.builtin_vars.items():
-            if var.get():
-                sel.append((name, False))
-        for name, var in self.plugin_vars.items():
-            if var.get():
-                sel.append((name, True))
-        if self.svg_passthrough_var.get():
-            sel.append(("svg", False))
-        return sel
-
-    def run_selected(self):
-        if not CLI_PATH.exists():
-            messagebox.showerror("Error", f"CLI not found: {CLI_PATH}")
-            return
-
-        try:
-            pts = int(self.points_var.get().strip())
-            cas = int(self.cascade_var.get().strip())
-        except ValueError:
-            messagebox.showerror("Error", "Points and Cascade Stages must be integers.")
-            return
-        seed_str = self.seed_var.get().strip()
-        seed = int(seed_str) if seed_str else None
-
-        selections = self._collect_selections()
-        if not selections:
-            messagebox.showinfo(
-                "Nothing to run", "Select at least one geometry or plugin."
+            html.append(
+                f"<li class='ok'><b>{geom}</b> — {svg_shapes} shapes • {size_k} • "
+                f"<a target='_blank' href='{file_url}'>open SVG</a><br>"
+                f"<embed src='{file_url}' type='image/svg+xml' class='preview' "
+                f"onerror='this.src=\"{web_url}\"'></li>"
             )
-            return
-
-        need_image = (
-            any(g != "svg" for g, _ in selections) or not self.svg_passthrough_var.get()
-        )
-        if need_image and not self.input_img_var.get().strip():
-            messagebox.showerror("Error", "Please choose an input image.")
-            return
-        if self.svg_passthrough_var.get() and not self.input_svg_var.get().strip():
-            messagebox.showerror(
-                "Error", "SVG passthrough is enabled but no input SVG selected."
+            success_count += 1
+        else:
+            expected = outputs.get(
+                "expected_svg", f"Expected: {out_dir / geom / f'frame_{geom}.svg'}"
             )
+            rc = r.get("rc", "unknown")
+            html.append(
+                f"<li class='err'>⚠ No SVG for <b>{geom}</b> (rc={rc}) — {expected}</li>"
+            )
+
+    # Add summary and controls
+    html.extend(
+        [
+            "</ul>",
+            "<div style='margin-top:30px;padding:15px;background:#f0f8ff;border-radius:8px'>",
+            f"<p><strong>Batch Results:</strong> {success_count} successful, {len(results) - success_count} failed</p>",
+            "<button onclick='location.reload()' style='padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:10px'>Refresh Gallery</button>",
+            "<button onclick='switchToServer()' style='padding:8px 16px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer'>View in Web Server</button>",
+            "</div>",
+            "<script>",
+            "function switchToServer() {",
+            f"  window.open('http://127.0.0.1:5123/gallery/{out_dir.name}', '_blank');",
+            "}",
+            "</script>",
+        ]
+    )
+
+    path = out_dir / "index.html"
+    path.write_text("\n".join(html), encoding="utf-8")
+    _log(f"[ui] Wrote gallery -> {path}")
+    return path
+
+
+def _run_worker(prefs: Dict[str, Any]) -> None:
+    global BUSY
+    BUSY = True
+    try:
+        run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        out_dir = OUT_ROOT / run_id
+        geoms = list(prefs.get("geoms", GEOMS))
+        _log(f"[ui] Running {len(geoms)} geometries into {out_dir}…")
+        _log(f"[ui] Input image: {prefs.get('input_image', 'NOT SET')}")
+
+        # Quick environment check
+        cli_path = ROOT / "cubist_cli.py"
+        if not cli_path.exists():
+            _log(f"[ui] ERROR: CLI not found at {cli_path}")
             return
 
-        self.log.configure(state="normal")
-        self.log.delete("1.0", "end")
-        self.log.configure(state="disabled")
-        self.set_status("Running…")
-        with self.queue_out.mutex:
-            self.queue_out.queue.clear()
-
-        runner = RunnerThread(
-            queue_out=self.queue_out,
-            selections=selections,
-            points=pts,
-            seed=seed,
-            cascade_stages=cas,
-            export_svg=bool(self.export_svg_var.get()),
-            enable_plugin_exec=bool(self.plugin_exec_var.get()),
-            input_image=self.input_img_var.get().strip() or None,
-            output_root=OUTPUT_ROOT,
-            svg_passthrough=bool(self.svg_passthrough_var.get()),
-            input_svg=self.input_svg_var.get().strip() or None,
-        )
-        runner.start()
-
-        def waiter():
-            while runner.is_alive():
-                time.sleep(0.2)
-            self.set_status("Done.")
-
-        threading.Thread(target=waiter, daemon=True).start()
-
-    def open_output_root(self):
-        base = OUTPUT_ROOT
-        if base.exists():
-            subdirs = [p for p in base.iterdir() if p.is_dir()]
-            if subdirs:
-                subdirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                startfile_cross(subdirs[0])
-                return
-        startfile_cross(base)
-
-    def clean_outputs(self):
-        base = OUTPUT_ROOT
-        if not base.exists():
-            messagebox.showinfo("Nothing to clean", f"{base} does not exist.")
+        # Check input image
+        input_path = Path(prefs.get("input_image", ""))
+        if not input_path.exists():
+            _log(f"[ui] ERROR: Input image not found at {input_path}")
             return
-        ok = messagebox.askyesno(
-            "Confirm clean",
-            f"Delete ALL contents under:\n{base}\n\nThis cannot be undone.",
-        )
-        if not ok:
-            return
-        import shutil
 
+        results: List[Dict[str, Any]] = []
+        for g in geoms:
+            cmd = _cmd_for_geom(g, prefs, out_dir)
+            _log(f"[cmd] Running: {g}")
+
+            t0 = time.time()
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    env=_env_with_paths(),
+                    cwd=ROOT,  # Ensure we're in the right directory
+                )
+            except Exception as e:
+                _log(f"[cli] spawn ERROR for {g}: {e!r}")
+                results.append(
+                    {
+                        "_geom": g,
+                        "geometry": g,
+                        "rc": 998,
+                        "outputs": {"svg_exists": False},
+                    }
+                )
+                continue
+
+            # Parse the JSON output from our CLI
+            output_data = _parse_cli_json_output(proc.stdout)
+            if not output_data:
+                output_data = {"_geom": g, "geometry": g, "rc": proc.returncode or 1}
+
+            # Ensure geometry field is set
+            output_data["geometry"] = g
+            output_data["_geom"] = g
+
+            rc = output_data.get("rc", proc.returncode or 1)
+            elapsed = f"{time.time()-t0:.2f}s"
+            results.append(output_data)
+
+            outputs = output_data.get("outputs", {})
+            if rc == 0 and outputs.get("svg_exists"):
+                svg_path = outputs.get("svg_path", "")
+                svg_shapes = outputs.get("svg_shapes", 0)
+                svg_size = outputs.get("svg_size", 0)
+                _log(f"[cli] ✓ {g}: {svg_shapes} shapes, {svg_size} bytes ({elapsed})")
+            else:
+                _log(f"[cli] ✗ {g}: failed with rc={rc} ({elapsed})")
+                # Log more details for debugging
+                if proc.stderr:
+                    err_lines = proc.stderr.strip().splitlines()
+                    for err_line in err_lines[:2]:  # First 2 lines of stderr
+                        if err_line.strip():
+                            _log(f"[cli] stderr: {err_line.strip()}")
+
+        # Generate gallery
         try:
-            shutil.rmtree(base)
-            base.mkdir(parents=True, exist_ok=True)
-            self.append_log("[ui] Cleaned production outputs.")
+            gallery_path = _write_gallery(out_dir, results)
+            success_count = len(
+                [r for r in results if r.get("outputs", {}).get("svg_exists")]
+            )
+            _log(
+                f"[ui] Generated gallery with {success_count}/{len(results)} successful SVGs"
+            )
+
+            # Auto-open with better messaging
+            if prefs.get("auto_open_gallery", True):
+                try:
+                    _log("[ui] Opening gallery in browser...")
+                    _log(f"[ui] Gallery URL: {gallery_path.as_uri()}")
+
+                    if os.name == "nt":
+                        os.startfile(gallery_path)  # type: ignore[attr-defined]
+                    else:
+                        webbrowser.open(str(gallery_path))
+
+                    _log("[ui] Gallery opened. Look for new browser tab!")
+                    _log(
+                        f"[ui] Web server gallery: http://127.0.0.1:5123/gallery/{out_dir.name}"
+                    )
+
+                except Exception as e:
+                    _log(f"[ui] Could not auto-open gallery: {e}")
+                    _log(f"[ui] Manual gallery URL: {gallery_path.as_uri()}")
+            else:
+                _log(f"[ui] Gallery ready: {gallery_path.as_uri()}")
+
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to clean outputs:\n{e}")
+            _log(f"[ui] Gallery generation ERROR: {e!r}")
 
-    def save_config(self):
-        cfg = {
-            "input_img": self.input_img_var.get(),
-            "points": self.points_var.get(),
-            "seed": self.seed_var.get(),
-            "cascade": self.cascade_var.get(),
-            "export_svg": int(self.export_svg_var.get()),
-            "plugin_exec": int(self.plugin_exec_var.get()),
-            "builtins": {k: int(v.get()) for k, v in self.builtin_vars.items()},
-            "plugins": {k: int(v.get()) for k, v in self.plugin_vars.items()},
-            "svg_passthrough": int(self.svg_passthrough_var.get()),
-            "input_svg": self.input_svg_var.get(),
-        }
-        try:
-            CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
-            CONFIG_PATH.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-            self.set_status(f"Saved config to {CONFIG_PATH}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save config:\n{e}")
-
-    def load_config(self):
-        if not CONFIG_PATH.exists():
-            return
-        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        self.input_img_var.set(cfg.get("input_img", ""))
-        self.points_var.set(str(cfg.get("points", "800")))
-        self.seed_var.set(str(cfg.get("seed", "123")))
-        self.cascade_var.set(str(cfg.get("cascade", "3")))
-        self.export_svg_var.set(int(cfg.get("export_svg", 1)))
-        self.plugin_exec_var.set(int(cfg.get("plugin_exec", 1)))
-        for k, v in cfg.get("builtins", {}).items():
-            if k in self.builtin_vars:
-                self.builtin_vars[k].set(int(v))
-        # plugin selections are applied after the next discovery
+    except Exception as e:
+        _log(f"[ui] Worker ERROR: {e!r}")
+    finally:
+        BUSY = False
+        _log("[ui] Batch complete")
 
 
-def main():
-    versioning.print_banner("prod_ui-entry")
-    app = ProdUI()
-    app.mainloop()
+# ---------------- Flask UI ----------------
+
+TPL = r"""
+<!doctype html><meta charset="utf-8">
+<title>Cubist — Batch Runner</title>
+<style>
+ body{font:16px system-ui,Segoe UI,Tahoma,Arial;margin:16px}
+ .row{margin:8px 0}
+ input[type=text]{width:560px;font-family:monospace;font-size:14px}
+ .log{background:#111;color:#ddd;min-height:340px;padding:10px;white-space:pre-wrap;font-family:monospace;font-size:13px;border-radius:4px}
+ .btn{padding:8px 14px;border:1px solid #888;border-radius:6px;background:#f5f5f5;cursor:pointer;margin:2px}
+ .btn[disabled]{opacity:.5;cursor:not-allowed}
+ .btn.primary{background:#007bff;color:white;border-color:#0056b3}
+ img#preview{max-height:80px;vertical-align:middle;margin-left:10px;border:1px solid #ccc;border-radius:3px}
+ .note{font-size:12px;color:#666;margin-top:4px}
+ .status{padding:8px;margin:8px 0;border-radius:4px}
+ .status.success{background:#d4edda;color:#155724}
+ .status.error{background:#f8d7da;color:#721c24}
+ .status.warning{background:#fff3cd;color:#856404}
+ .geom-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0}
+ .input-status{font-size:12px;margin-top:4px;padding:4px 8px;border-radius:3px}
+ .input-status.ok{background:#d4edda;color:#155724}
+ .input-status.error{background:#f8d7da;color:#721c24}
+</style>
+
+<h1>🎨 Cubist Art — Production Batch Runner</h1>
+
+<div class="status success">
+  <strong>Status:</strong> Production UI v2.3.7 ready. Server running at <code>http://127.0.0.1:5123</code>
+</div>
+
+<div class="row">
+  <label><strong>Input image:</strong><br>
+    <input id="input_image" type="text" placeholder="Path to input image (or upload below)">
+  </label><br>
+  <div id="input_status" class="input-status" style="display:none"></div>
+  <input id="filepick" type="file" accept="image/*">
+  <img id="preview" alt="preview" style="display:none">
+  <div class="note">Upload a file or specify path to existing image. Preview shows what will be processed.</div>
+</div>
+
+<div class="row">
+  <label>Points: <input id="points" type="number" value="4000" style="width:100px" min="50" max="10000"></label>
+  <label>Seed: <input id="seed" type="number" value="42" style="width:80px" min="1" max="9999"></label>
+  <label>Cascade: <input id="cascade" type="number" value="3" style="width:60px" min="1" max="5"></label>
+</div>
+
+<div class="row">
+  <strong>Geometries:</strong> (Start with working ones: delaunay, voronoi, rectangles)<br>
+  <div class="geom-grid">
+    <label><input type="checkbox" class="g" value="delaunay" checked> delaunay (triangles)</label>
+    <label><input type="checkbox" class="g" value="voronoi" checked> voronoi (cells)</label>
+    <label><input type="checkbox" class="g" value="rectangles" checked> rectangles</label>
+    <label><input type="checkbox" class="g" value="poisson_disk"> poisson_disk</label>
+    <label><input type="checkbox" class="g" value="scatter_circles"> scatter_circles</label>
+    <label><input type="checkbox" class="g" value="concentric_circles"> concentric_circles</label>
+  </div>
+  <div class="note">Note: Some geometries may have compatibility issues. Start with the checked ones for best results.</div>
+</div>
+
+<div class="row">
+  <strong>Options:</strong><br>
+  <label><input id="export_svg" type="checkbox" checked> Export SVG files</label>
+  <label><input id="auto_open_gallery" type="checkbox" checked> Auto-open gallery when complete</label>
+</div>
+
+<div class="row">
+  <button id="run" class="btn primary">🚀 Run Batch</button>
+  <button id="idle" class="btn">💤 Status Check</button>
+  <button id="copy" class="btn">📋 Copy Log</button>
+  <button id="export" class="btn">💾 Export Log</button>
+  <button id="clear" class="btn">🗑️ Clear Log</button>
+</div>
+
+<h3>Batch Execution Log</h3>
+<div id="log" class="log">Production UI ready - v2.3.7 compatible
+🎨 Server running at http://127.0.0.1:5123
+Auto-open enabled: Gallery will open in new browser tab when batch completes
+Select input image, choose geometries, and click 'Run Batch' to start.
+</div>
+
+<script>
+const qs = id => document.getElementById(id);
+const logEl = qs('log');
+let seq = 0;
+
+function addLog(lines){
+  if(!lines || !lines.length) return;
+  logEl.textContent += lines.join("\n") + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function gather(){
+  const geoms = Array.from(document.querySelectorAll('input.g:checked')).map(x => x.value);
+  return {
+    input_image: qs('input_image').value.trim(),
+    points: Number(qs('points').value),
+    seed: Number(qs('seed').value),
+    cascade: Number(qs('cascade').value),
+    export_svg: qs('export_svg').checked,
+    auto_open_gallery: qs('auto_open_gallery').checked,
+    geoms
+  };
+}
+
+async function savePrefs(){
+  try {
+    const r = await fetch('/save_prefs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(gather())});
+    const j = await r.json(); addLog(j.log || []);
+  } catch(e) {
+    addLog(['[ui] Error saving preferences: ' + e.message]);
+  }
+}
+
+async function loadPrefs(){
+  try {
+    const r = await fetch('/load_prefs'); const p = await r.json();
+    qs('input_image').value = p.input_image || '';
+    qs('points').value = p.points ?? 4000;
+    qs('seed').value = p.seed ?? 42;
+    qs('cascade').value = p.cascade ?? 3;
+    qs('export_svg').checked = !!p.export_svg;
+    qs('auto_open_gallery').checked = !!p.auto_open_gallery;
+    // Uncheck all first
+    document.querySelectorAll('input.g').forEach(box => box.checked = false);
+    (p.geoms||[]).forEach(g => { const box = document.querySelector('input.g[value="'+g+'"]'); if(box) box.checked = true; });
+    refreshPreview();
+  } catch(e) {
+    addLog(['[ui] Error loading preferences: ' + e.message]);
+  }
+}
+
+function refreshPreview(){
+  const p = qs('input_image').value.trim();
+  const preview = qs('preview');
+  const status = qs('input_status');
+
+  if(p) {
+    preview.src = '/file?p='+encodeURIComponent(p)+'&t='+Date.now();
+    preview.style.display = 'inline';
+    preview.onload = () => {
+      status.textContent = '✓ Image preview loaded: ' + p.split(/[/\\]/).pop();
+      status.className = 'input-status ok';
+      status.style.display = 'block';
+    };
+    preview.onerror = () => {
+      preview.style.display = 'none';
+      status.textContent = '⚠ Could not preview image: ' + p.split(/[/\\]/).pop();
+      status.className = 'input-status error';
+      status.style.display = 'block';
+    };
+  } else {
+    preview.style.display = 'none';
+    status.style.display = 'none';
+  }
+}
+
+qs('filepick').addEventListener('change', async ()=>{
+  const f = qs('filepick').files[0]; if(!f) return;
+  const form = new FormData(); form.append('file', f);
+  addLog(['[ui] Uploading ' + f.name + '...']);
+  try {
+    const r = await fetch('/upload', {method:'POST', body:form});
+    const j = await r.json();
+    if(j.ok && j.path){
+      qs('input_image').value = j.path;
+      addLog(['[ui] ✓ Uploaded -> '+j.path]);
+      refreshPreview();
+      await savePrefs();
+    } else {
+      addLog(['[ui] ✗ Upload failed: '+(j.error||'unknown error')]);
+    }
+  } catch(e) {
+    addLog(['[ui] ✗ Upload error: '+e.message]);
+  }
+});
+
+qs('input_image').addEventListener('change', refreshPreview);
+qs('input_image').addEventListener('blur', savePrefs);
+
+qs('run').addEventListener('click', async ()=>{
+  const prefs = gather();
+  if(!prefs.input_image) {
+    addLog(['[ui] ✗ Please specify an input image']);
+    return;
+  }
+  if(prefs.geoms.length === 0) {
+    addLog(['[ui] ✗ Please select at least one geometry']);
+    return;
+  }
+  await savePrefs();
+  addLog([`[ui] Starting batch: ${prefs.geoms.join(', ')}, ${prefs.points} points, seed ${prefs.seed}`]);
+  if(prefs.auto_open_gallery) {
+    addLog(['[ui] Auto-open enabled: Gallery will open in new tab when complete']);
+  }
+  await fetch('/run', {method:'POST'});
+});
+
+qs('idle').addEventListener('click', ()=>addLog(['[ui] Status: ' + (document.getElementById('run').disabled ? 'BUSY - batch running' : 'IDLE - ready for commands')]));
+qs('copy').addEventListener('click', ()=>{
+  navigator.clipboard.writeText(logEl.textContent||'').then(()=>addLog(['[ui] Log copied to clipboard']));
+});
+qs('export').addEventListener('click', ()=>{
+  const blob = new Blob([logEl.textContent||''], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cubist_batch_log_'+new Date().toISOString().slice(0,19).replace(/[:-]/g,'_')+'.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  addLog(['[ui] Log exported']);
+});
+qs('clear').addEventListener('click', ()=>{
+  logEl.textContent = 'Log cleared.\nProduction UI ready for next batch.\n';
+});
+
+async function poll(){
+  try{
+    const r = await fetch('/status?since='+seq);
+    const j = await r.json();
+    if(j.seq !== undefined) seq = j.seq;
+    addLog(j.lines || []);
+    if(j.busy){
+      qs('run').setAttribute('disabled', 'true');
+      qs('run').textContent = '🔄 Running...';
+    } else {
+      qs('run').removeAttribute('disabled');
+      qs('run').textContent = '🚀 Run Batch';
+    }
+  }catch(e){
+    // Silently handle polling errors
+  }
+  setTimeout(poll, 1200);
+}
+
+// Initialize
+loadPrefs().then(()=>{
+  poll();
+  addLog(['[ui] Production UI initialized']);
+  addLog(['[ui] Tip: Gallery auto-opens when batch completes (look for new browser tab)']);
+});
+</script>
+"""
+
+
+@app.route("/")
+def home() -> Response:
+    return render_template_string(TPL)
+
+
+@app.route("/file")
+def get_file():
+    p_param = request.args.get("p", "")
+
+    # Handle both absolute and relative paths
+    if Path(p_param).is_absolute():
+        p = Path(p_param)
+    else:
+        p = ROOT / p_param
+
+    if not p.exists():
+        return Response("File not found", status=404)
+
+    # Security check - ensure file is within project
+    try:
+        p.resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        return Response("Access denied", status=403)
+
+    return send_file(p, conditional=True)
+
+
+@app.route("/gallery/<run_id>")
+def web_gallery(run_id):
+    """Serve gallery via web server instead of static file"""
+    gallery_dir = OUT_ROOT / run_id
+    if not gallery_dir.exists():
+        return Response("Gallery not found", status=404)
+
+    # Read results from the static HTML or reconstruct
+    html_file = gallery_dir / "index.html"
+    if html_file.exists():
+        content = html_file.read_text(encoding="utf-8")
+        # Replace file:// URLs with web server URLs
+        content = content.replace("file:///", "/file?p=")
+        return Response(content, mimetype="text/html")
+    else:
+        return Response("Gallery not ready", status=404)
+
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "error": "no file"}), 400
+
+    if not f.filename:
+        return jsonify({"ok": False, "error": "no filename"}), 400
+
+    dest_dir = ROOT / "input" / "uploads"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clean filename
+    safe_name = "".join(c for c in f.filename if c.isalnum() or c in "._-")
+    if not safe_name:
+        safe_name = "uploaded_image"
+
+    dest = dest_dir / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}_{safe_name}"
+
+    try:
+        f.save(dest)
+        return jsonify({"ok": True, "path": str(dest.resolve())})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/save_prefs", methods=["POST"])
+def save_prefs_route():
+    try:
+        p = request.get_json(force=True)
+        _save_prefs(p)
+        return jsonify({"ok": True, "log": ["[ui] Preferences saved"]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/load_prefs")
+def load_prefs_route():
+    return jsonify(_load_prefs())
+
+
+_SEQ = 0
+
+
+@app.route("/status")
+def status():
+    global _SEQ
+    since = int(request.args.get("since", 0))
+    lines: List[str] = []
+    while not _LOGQ.empty():
+        lines.append(_LOGQ.get())
+    if lines:
+        _SEQ += 1
+    return jsonify({"busy": BUSY, "lines": lines if _SEQ > since else [], "seq": _SEQ})
+
+
+@app.route("/run", methods=["POST"])
+def run_batch():
+    global RUN_THREAD, BUSY
+    if BUSY:
+        _log("[ui] Batch already running - please wait")
+        return jsonify({"ok": False, "busy": True})
+
+    prefs = _load_prefs()
+    _log(f"[ui] Starting batch with {len(prefs.get('geoms', []))} geometries")
+
+    RUN_THREAD = threading.Thread(target=_run_worker, args=(prefs,), daemon=True)
+    RUN_THREAD.start()
+    return jsonify({"ok": True, "busy": True})
 
 
 if __name__ == "__main__":
-    main()
+    print("🎨 Cubist Art Production UI v2.3.7")
+    print("=" * 50)
+    print("Starting Flask server...")
+    print()
+    print("🌐 Web UI: http://127.0.0.1:5123")
+    print("📁 Project: " + str(ROOT))
+    print()
+    print("Features:")
+    print("• Advanced batch runner with real-time logging")
+    print("• File upload and preview system")
+    print("• Auto-generated galleries with SVG previews")
+    print("• Multi-geometry selection and parameter tuning")
+    print()
+    print("ℹ️  Starting up...")
+    print("   Server will be ready in a few seconds")
+    print("   Browser will auto-open when ready")
+    print("   Look for new browser tab!")
+    print()
+    print("Press Ctrl+C to stop server")
+    print("=" * 50)
 
+    OUT_ROOT.mkdir(parents=True, exist_ok=True)
 
-# === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.7 - stamped 2025-09-01T13:31:49+02:00
-# === CUBIST FOOTER STAMP END ===
+    # Auto-open browser after short delay to let server start
+    def delayed_open():
+        time.sleep(2)  # Wait for server to be ready
+        try:
+            webbrowser.open("http://127.0.0.1:5123")
+            print("🌐 Browser opened: http://127.0.0.1:5123")
+        except Exception as e:
+            print(f"Could not auto-open browser: {e}")
+            print("Manual URL: http://127.0.0.1:5123")
+
+    threading.Thread(target=delayed_open, daemon=True).start()
+
+    app.run(port=5123, debug=False, host="127.0.0.1")

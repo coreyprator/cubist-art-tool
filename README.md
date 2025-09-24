@@ -1,8 +1,7 @@
 # === CUBIST STAMP BEGIN ===
 # Project: Cubist Art
 # File: README.md
-# Version: v2.3.7
-# Build: 2025-09-01T13:31:41
+# Version: v2.3# Build: 2025-09-01T13:31:41
 # Commit: 8163630
 # Stamped: 2025-09-01T13:31:43+02:00
 # === CUBIST STAMP END ===
@@ -115,6 +114,31 @@ powershell -ExecutionPolicy Bypass -File scripts\run_production.ps1 `
 - **PowerShell execution policy:**
   If you get script execution errors, add `-ExecutionPolicy Bypass` to your PowerShell command.
 
+## How to truly clear the entire terminal output (not just visible pane)
+
+You're right! <kbd>Ctrl</kbd>+<kbd>L</kbd> only clears the visible screen, not the scrollback buffer.
+
+**For a true "cls" equivalent in VS Code:**
+
+- **Best option:** <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> → type "Terminal: Clear" → select **"Terminal: Clear"**
+  - This completely clears all terminal output and scrollback buffer
+  - Same as typing `cls` in PowerShell
+
+**Alternative methods:**
+
+- **PowerShell:** Type `Clear-Host` (same as `cls`)
+- **Command Palette shortcut:** You can assign a custom keybinding:
+  1. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> → "Preferences: Open Keyboard Shortcuts"
+  2. Search for "Terminal: Clear"
+  3. Click the + to add a keybinding (e.g., <kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd>)
+
+**Summary:**
+- <kbd>Ctrl</kbd>+<kbd>L</kbd> = Clear visible screen only (scrollback remains)
+- Command Palette → "Terminal: Clear" = True `cls` equivalent (clears everything)
+- Type `cls` or `Clear-Host` = Also clears everything
+
+**Tip:** The Command Palette method works in any terminal (PowerShell, Command Prompt, Git Bash, etc.) within VS Code.
+
 ---
 
 **Tested geometries in v2.3:**
@@ -123,8 +147,41 @@ powershell -ExecutionPolicy Bypass -File scripts\run_production.ps1 `
 - rectangles (regular & cascade)
 - svg (input SVG mode, new)
 
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T13:31:43+02:00
+(input SVG mode, new)
 
 
 # === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.7 - stamped 2025-09-01T13:31:43+02:00
+# End of file - v2.3.7 - stamped 2025-09-01T11:23:57+02:00
+ svg (input SVG mode, new)
+
+# === CUBIST FOOTER STAMP BEGIN ===
+# End of file - v2.3.7 - stamped 2025-09-01T11:18:27+02:00
 # === CUBIST FOOTER STAMP END ===
+- delaunay (regular & cascade)
+- voronoi (regular & cascade)
+- rectangles (regular & cascade)
+- svg (input SVG mode, new)
+
+# PowerShell equivalent commands (wc is a Unix/Linux command, not available in PowerShell)
+
+# Count files in git (PowerShell equivalent)
+git ls-files | Measure-Object -Line | Select-Object -ExpandProperty Lines
+
+# Or shorter version:
+(git ls-files).Count
+
+# Other useful PowerShell equivalents:
+# Count lines in a file:
+Get-Content filename.txt | Measure-Object -Line
+
+# Count files in current directory:
+(Get-ChildItem).Count
+
+# Count Python files:
+(Get-ChildItem -Filter "*.py" -Recurse).Count
+(Get-ChildItem).Count
+
+# Count Python files:
+(Get-ChildItem -Filter "*.py" -Recurse).Count

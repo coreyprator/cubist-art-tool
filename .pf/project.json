@@ -1,0 +1,36 @@
+{
+  "scenarios": {
+    "system": [],
+    "project": []
+  },
+  "pf": {
+    "scripts_dir": "v2/scripts",
+    "runui_manifest": ".pf/runui.json",
+    "python": {
+      "version": "3.12",
+      "venv_path": "C:/venvs/cubist_art-3.12"
+    },
+    "runui": {
+      "type": "python",
+      "args": [
+        "-X",
+        "utf8",
+        "./cubist_gui_main.py"
+      ]
+    }
+  },
+  "project_name": "cubist_art",
+  "retry_policy": {
+    "auto_retries": 1
+  },
+  "theme_color": "#00FF00",
+  "standards": {
+    "documentation": ".pf/STANDARDS.md",
+    "version": "1.0",
+    "promptforge_version": "V2.3",
+    "validation_config": ".pf/validation_config.json",
+    "updated": "2025-09-21"
+  },
+  "version": "1.0.0",
+  "description": "PromptForge V2.3 managed project"
+}

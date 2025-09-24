@@ -17,6 +17,7 @@ __date__ = "2025-07-27"
 
 import json
 import os
+from pathlib import Path
 
 CONFIG_FILE = "last_config.json"
 
@@ -34,6 +35,15 @@ def load_last_config():
         except Exception:
             return {}
     return {}
+
+
+# [compat] normalize legacy config keys
+def normalize_config(cfg):
+    if "output_path" not in cfg or not cfg["output_path"]:
+        od = cfg.get("output_dir")
+        if od:
+            cfg["output_path"] = str(Path(od) / "cubist_output.svg")
+    return cfg
 
 
 # Version v12c | Timestamp: 2025-07-27 22:35 UTC | Hash: manual_fix

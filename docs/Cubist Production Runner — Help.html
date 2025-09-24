@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!-- saved from url=(0067)file:///G:/My%20Drive/Code/Python/cubist_art/docs/prod_ui_help.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cubist Production Runner — Help</title>
+<style>
+  :root { --bg:#0b0c10; --card:#111217; --ink:#e8e8e8; --muted:#9aa3b2; --accent:#8ab4f8; --bd:#1f2230; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; }
+  h1{font-size:20px;margin:.2rem 0 1rem 0}
+  h2{font-size:17px;margin:1.25rem 0 .5rem 0}
+  h3{font-size:15px;margin:1rem 0 .35rem 0}
+  .card{background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:16px; margin:.75rem 0}
+  code,kbd{background:#0d1117; border:1px solid #22263a; border-radius:6px; padding:.15rem .35rem; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.95em}
+  a{color:var(--accent); text-decoration:none} a:hover{text-decoration:underline}
+  table{width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--bd); border-radius:10px; overflow:hidden}
+  th,td{padding:8px 10px; border-bottom:1px solid var(--bd); text-align:left}
+  th{background:#151826}
+  .muted{color:var(--muted)}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px}
+  .imgcard{background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:10px}
+  .imgcard img,.imgcard object{width:100%; height:min(55vh,420px); background:#fff; border-radius:8px; border:0}
+  footer{margin-top:18px; color:var(--muted); font-size:12px}
+</style>
+</head>
+<body>
+  <h1>Cubist Production Runner — Help</h1>
+  <div class="card">
+    <p>This guide explains the <strong>Production Runner (prod_ui.py)</strong>: input selection, parameters, built-in geometries, discovered plugins, and actions.
+    It also shows how to open the gallery and where outputs are written.</p>
+    <p class="muted">This page is generated/managed by the app. You can safely edit it to add screenshots or updated examples.</p>
+  </div>
+
+  <h2>Quick Start</h2>
+  <div class="card">
+    <ol>
+      <li>Choose an <strong>Image</strong> (JPG/PNG) at the top left.</li>
+      <li>Set <strong>Points</strong>, <strong>Seed</strong>, and optional <strong>Cascade Stages</strong>.</li>
+      <li>Pick one or more <strong>Geometries</strong> and any <strong>Plugins</strong> you want to run.</li>
+      <li>Check <strong>Export SVG</strong> if you want SVG files.</li>
+      <li>Click <strong>Run Selected</strong>.</li>
+      <li>Use <strong>Open Output Folder</strong> or the new <strong>Open Gallery</strong> button.</li>
+    </ol>
+  </div>
+
+  <h2>Fields</h2>
+  <table>
+    <thead><tr><th>Field</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>Image</td><td>Source input used by the CLI for sampling, seeding, and color fills (when applicable).</td></tr>
+      <tr><td>Points</td><td>Number of seed points or grid density. Higher values → more detail, slower render.</td></tr>
+      <tr><td>Seed</td><td>Random seed for reproducible results.</td></tr>
+      <tr><td>Cascade Stages</td><td>Number of refinement passes. E.g. 3 performs three sequential stages.</td></tr>
+      <tr><td>Export SVG</td><td>Writes <code>.svg</code> files alongside any raster outputs.</td></tr>
+      <tr><td>Enable plugin exec</td><td>Allow discovered geometry plugins (e.g. <code>poisson_disk</code>).</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Built‑in Geometries</h2>
+  <div class="grid">
+    <div class="imgcard">
+      <h3>Delaunay</h3>
+      <p>Triangulates seed points and fills triangles (optionally image‑driven in cascade mode).</p>
+      <div class="muted">Example:</div>
+      <object data="file:///G:/My%20Drive/Code/Python/cubist_art/output/production/example/delaunay/delaunay.svg" type="image/svg+xml"></object>
+    </div>
+    <div class="imgcard">
+      <h3>Voronoi</h3>
+      <p>Partitions space into cells nearest each seed; great for mosaic styles.</p>
+      <div class="muted">Example:</div>
+      <object data="file:///G:/My%20Drive/Code/Python/cubist_art/output/production/example/voronoi/voronoi.svg" type="image/svg+xml"></object>
+    </div>
+    <div class="imgcard">
+      <h3>Rectangles</h3>
+      <p>Regular grid subdivided to approximate regions; simple and fast.</p>
+      <div class="muted">Example:</div>
+      <object data="file:///G:/My%20Drive/Code/Python/cubist_art/output/production/example/rectangles/rectangles.svg" type="image/svg+xml"></object>
+    </div>
+  </div>
+
+  <h2>Gallery</h2>
+  <div class="card">
+    <p>Use <strong>Open Gallery</strong> to generate <code>gallery.html</code> inside the selected output root and view all SVGs/PNGs side‑by‑side.
+       This calls <code>scripts/make_gallery.py &lt;output_root&gt;</code>.</p>
+  </div>
+
+  <h2>Tips</h2>
+  <div class="card">
+    <ul>
+      <li>Re‑run with the same <strong>Seed</strong> for exact reproducibility.</li>
+      <li>Use <code>--param seed_mode=poisson</code> in the CLI for evenly‑spaced seeds.</li>
+      <li>For cascade styles driven by the image, prefer a moderate point count and 2–3 stages.</li>
+    </ul>
+  </div>
+
+  <footer>Help last generated: <span id="ts">9/3/2025, 11:09:14 AM</span></footer>
+  <script>document.getElementById('ts').textContent=new Date().toLocaleString();</script>
+
+
+</body></html>

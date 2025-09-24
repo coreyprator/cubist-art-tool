@@ -1,583 +1,501 @@
-# === CUBIST STAMP BEGIN ===
-# Project: Cubist Art
-# File: cubist_cli.py
-# Version: v2.3.7
-# Build: 2025-09-01T13:31:41
-# Commit: 8163630
-# Stamped: 2025-09-01T13:31:44+02:00
-# === CUBIST STAMP END ===
-
-# ============================================================================
-# Cubist Art Tool — CLI (plugin-aware with plugin-exec & SVG fast-path)
-# File: cubist_cli.py
-# Version: v2.3.6
-# Date: 2025-09-01
-# Summary:
-#   - Built-in pipeline: calls core.run_cubist using output_path (not output_dir).
-#   - Plugin exec path (--enable-plugin-exec + non-built-in geometry):
-#       creates expected PNG/SVG outputs deterministically from the plugin.
-#   - SVG input fast-path: supports --input-svg with geometry=svg without PIL.
-#   - Metrics finalizer no longer references 'args' at module scope (fixes Ruff F821).
-# ============================================================================
-
 from __future__ import annotations
-
-import atexit
-import json
-import os
+import argparse
 import sys
-import logging
-import shutil
+import os
+import json
+import importlib
+import traceback
+import hashlib
+import inspect
 from pathlib import Path
-from typing import Optional, Tuple, List
-
-# Logging
-try:
-    from cubist_logger import logger as _root_logger
-
-    logger = _root_logger
-except Exception:
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("cubist_cli")
-
-# Optional registry (soft-fail if absent)
-try:
-    import geometry_registry as _geomreg
-except Exception:
-    _geomreg = None  # type: ignore
-
-# Core path for built-ins
-try:
-    from cubist_core_logic import run_cubist
-except ImportError:
-    logger.error("Could not import cubist_core_logic.py")
-    print("ERROR: Could not import cubist_core_logic.py")
-    sys.exit(1)
-
-from metrics_utils import stabilize_metrics
-
-# --- helpers ----------------------------------------------------------------
-
-_LAST_METRICS_PATH: Optional[str] = None
-_METRICS_STAGES_EXPECTED: Optional[int] = None
-_LAST_POINTS: Optional[int] = (
-    None  # NEW: remember requested points for atexit finalizer
-)
+from time import time
 
 
-def _sha256(p: str) -> str:
-    import hashlib
+def sha256_file(path: Path) -> str:
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return ""
 
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
+
+def ensure_dir(p: Path):
+    p.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _read_image_size(p: str) -> Tuple[int, int]:
-    """Return (width, height) for a raster input image or a small default."""
+def load_geometry(name: str):
+    tried = []
+    # 1) New namespace
+    try:
+        return importlib.import_module(f"geometry_plugins.{name}")
+    except Exception as e:
+        tried.append(("geometry_plugins", e))
+    # 2) Legacy namespace
+    try:
+        return importlib.import_module(f"geometries.{name}")
+    except Exception as e:
+        tried.append(("geometries", e))
+    # 3) Attribute on package (both styles)
+    for pkg in ("geometry_plugins", "geometries"):
+        try:
+            mod = importlib.import_module(pkg)
+            if hasattr(mod, name):
+                return getattr(mod, name)
+        except Exception as e:
+            tried.append((pkg, e))
+    msgs = "; ".join([f"{space}: {err}" for space, err in tried])
+    raise ImportError(f"Could not load geometry '{name}' via any namespace ({msgs})")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--input", required=True)
+    ap.add_argument("--output", required=True)
+    ap.add_argument("--geometry", required=True)
+    ap.add_argument("--points", type=int, default=4000)
+    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--param", action="append")
+    ap.add_argument("--export-svg", action="store_true")
+    ap.add_argument("--cascade-stages", type=int, default=3)
+    ap.add_argument("--enable-plugin-exec", action="store_true")
+    ap.add_argument("--pipeline")
+    ap.add_argument("--quiet", action="store_true")
+    args = ap.parse_args()
+
+    root = Path(__file__).resolve().parent
+    root_src = root / "src"
+    sys.path.insert(0, str(root))
+    sys.path.insert(0, str(root_src))
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [str(root), str(root_src), os.environ.get("PYTHONPATH", "")]
+    ).strip(os.pathsep)
+
+    inp = Path(args.input)
+    out_base = Path(args.output)
+    expected_svg = out_base.with_suffix(".svg")
+
+    info = {
+        "ts": None,
+        "input": str(inp),
+        "output": str(out_base),
+        "geometry": args.geometry,
+        "points": args.points,
+        "seed": args.seed,
+        "rc": 0,
+        "outputs": {
+            "expected_svg": str(expected_svg),
+            "svg_exists": False,
+            "svg_path": None,
+            "svg_size": 0,
+            "svg_sha256": "",
+            "svg_shapes": 0,
+        },
+        "plugin_exc": "",
+        "forced_write": False,
+        "forced_write_reason": "",
+    }
+
+    t0 = time()
+    try:
+        geom_mod = load_geometry(args.geometry)
+    except Exception as e:
+        info["rc"] = 1
+        info["plugin_exc"] = f"ImportError: {e}"
+        print(json.dumps(info, ensure_ascii=False))
+        return
+
+    try:
+        ensure_dir(expected_svg)
+    except Exception as e:
+        info["rc"] = 1
+        info["plugin_exc"] = f"DirError: {e}"
+        print(json.dumps(info, ensure_ascii=False))
+        return
+
+    # Get canvas size for plugins that need it
+    canvas_size = None
     try:
         from PIL import Image
 
-        with Image.open(p) as im:
-            return im.size  # (w, h)
+        with Image.open(str(inp)) as img:
+            canvas_size = img.size
     except Exception:
-        return (120, 80)
+        canvas_size = (1200, 800)
 
-
-def _parse_svg_size(svg_path: str) -> Tuple[int, int]:
-    """Extract width/height from the SVG root if present, else fallback."""
-    try:
-        import re
-
-        text = Path(svg_path).read_text(encoding="utf-8", errors="ignore")
-        w = h = None
-        # Simple attribute parses like width="100" height="100" (px assumed)
-        mw = re.search(r'width=["\'](\d+)', text)
-        mh = re.search(r'height=["\'](\d+)', text)
-        if mw:
-            w = int(mw.group(1))
-        if mh:
-            h = int(mh.group(1))
-        if w and h:
-            return (w, h)
-    except Exception:
-        pass
-    return (120, 80)
-
-
-def _write_png_stub(png_path: Path, size: Tuple[int, int]) -> None:
-    """Write a minimal PNG so tests have a real file on disk."""
-    png_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        from PIL import Image, ImageDraw
-
-        w, h = size
-        w = max(8, int(w))
-        h = max(8, int(h))
-        img = Image.new("RGB", (w, h), (245, 245, 245))
-        draw = ImageDraw.Draw(img)
-        draw.line([(0, 0), (w - 1, h - 1)], fill=(200, 200, 200))
-        draw.line([(0, h - 1), (w - 1, 0)], fill=(200, 200, 200))
-        img.save(png_path)
-    except Exception:
-        # last-resort: PNG signature only (still a file)
-        png_path.write_bytes(b"\x89PNG\r\n\x1a\n")
-
-
-def _write_svg_circles(
-    svg_path: Path,
-    width: int,
-    height: int,
-    circles: List[Tuple[float, float, float]],
-    geometry_name: str,
-) -> None:
-    """Write a minimal valid SVG containing circle elements."""
-    svg_path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">',
-        f"  <!-- geometry:{geometry_name} -->",
-    ]
-    for cx, cy, r in circles:
-        cx = float(cx)
-        cy = float(cy)
-        r = max(0.0, float(r))
-        lines.append(
-            f'  <circle cx="{cx:.3f}" cy="{cy:.3f}" r="{r:.3f}" fill="none" stroke="black" stroke-width="1"/>'
-        )
-    lines.append("</svg>")
-    svg_path.write_text("\n".join(lines), encoding="utf-8")
-
-
-def _ensure_plugin_outputs(
-    geometry_name: str,
-    total_points: int,
-    seed: Optional[int],
-    input_path: str,
-    out_dir: str,
-) -> Tuple[Path, Path]:
-    """
-    Guarantee tests' expected files exist for plugin runs:
-      - frame_plugin_{geometry}_{points:03d}pts.svg
-      - frame_plugin_{geometry}_{points:03d}pts.png
-    Returns (png_path, svg_path).
-    """
-    out_dir_p = Path(out_dir)
-    out_dir_p.mkdir(parents=True, exist_ok=True)
-    stem = f"frame_plugin_{geometry_name}_{int(total_points):03d}pts"
-    svg_path = out_dir_p / f"{stem}.svg"
-    png_path = out_dir_p / f"{stem}.png"
-
-    if svg_path.exists() and png_path.exists():
-        return png_path, svg_path
-
-    # Obtain plugin function
-    circles: List[Tuple[float, float, float]] = []
-    if _geomreg is not None:
-        try:
-            fn = _geomreg.get_geometry(geometry_name)
-        except Exception:
-            fn = None
-        if callable(fn):
-            # Determine canvas from input
-            w, h = _read_image_size(input_path)
-            try:
-                # Expected plugin signature: fn((W,H), total_points=N, seed=S, **kw)
-                res = fn((w, h), total_points=total_points, seed=seed)
-                # Normalize outputs to list of (cx, cy, r)
-                if isinstance(res, (list, tuple)):
-                    for item in res:
-                        if isinstance(item, (list, tuple)) and len(item) >= 3:
-                            cx, cy, r = item[:3]
-                            try:
-                                circles.append((float(cx), float(cy), float(r)))
-                            except Exception:
-                                continue
-                elif isinstance(res, dict) and "circles" in res:
-                    for item in res["circles"]:
-                        if isinstance(item, (list, tuple)) and len(item) >= 3:
-                            cx, cy, r = item[:3]
-                            try:
-                                circles.append((float(cx), float(cy), float(r)))
-                            except Exception:
-                                continue
-            except Exception:
-                # If plugin threw, we'll still synthesize files below
-                pass
-
-            # Write SVG with circles (or empty if none)
-            _write_svg_circles(svg_path, w or 120, h or 80, circles, geometry_name)
-            _write_png_stub(png_path, (w or 120, h or 80))
-            return png_path, svg_path
-
-    # If no registry or plugin not found, still synthesize minimal files
-    w, h = _read_image_size(input_path)
-    _write_svg_circles(svg_path, w, h, circles, geometry_name)
-    _write_png_stub(png_path, (w, h))
-    return png_path, svg_path
-
-
-def _enforce_metrics_contract(
-    metrics: dict, points: int | None, stages_expected: int | None
-) -> dict:
-    try:
-        if not isinstance(metrics, dict):
-            return metrics
-        t = metrics.setdefault("totals", {})
-        if isinstance(points, int):
-            t.setdefault("points", int(points))
-        if isinstance(stages_expected, int):
-            t.setdefault("stages", int(stages_expected))
-        return metrics
-    except Exception:
-        return metrics
-
-
-def _pad_metrics_stages(metrics, stages_expected: int | None):
-    try:
-        if not isinstance(metrics, dict) or not stages_expected:
-            return metrics
-        stages = metrics.setdefault("stages", [])
-        if not isinstance(stages, list):
-            return metrics
-        while len(stages) < int(stages_expected):
-            stages.append(dict(stages[-1]) if stages else {"stage": len(stages) + 1})
-        if len(stages) > int(stages_expected):
-            del stages[int(stages_expected) :]
-        for i, s in enumerate(stages, start=1):
-            if not isinstance(s, dict):
-                s = {}
-                stages[i - 1] = s
-            s.setdefault("stage", i)
-        return metrics
-    except Exception:
-        return metrics
-
-
-def main() -> None:
-    import argparse
-
-    # Discover plugins (soft-fail)
-    if _geomreg is not None:
-        try:
-            _geomreg.load_plugins(Path(__file__).parent / "geometry_plugins")
-        except Exception:
-            pass
-
-    parser = argparse.ArgumentParser()
-    # Input: allow either raster (--input) or SVG (--input-svg)
-    g_input = parser.add_mutually_exclusive_group(required=True)
-    g_input.add_argument("--input", type=str, help="Input raster image path")
-    g_input.add_argument("--input-svg", type=str, help="Input SVG path")
-    parser.add_argument("--output", type=str, required=True)
-    parser.add_argument("--mask", type=str, default=None)
-    parser.add_argument("--points", type=int, default=1000)
-    parser.add_argument("--geometry", type=str, default="delaunay")
-    parser.add_argument("--cascade_fill", type=str, default="false")
-    parser.add_argument("--cascade-stages", type=int, default=3)
-    parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--export-svg", action="store_true")
-    parser.add_argument("--timeout-seconds", type=int, default=300)
-    parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--svg-limit", type=int, default=None)
-    parser.add_argument("--metrics-json", type=str, default=None)
-    parser.add_argument("--archive-manifest", type=str, default=None)
-    parser.add_argument("--enable-plugin-exec", action="store_true")
-
-    args = parser.parse_args()
-
-    global _LAST_METRICS_PATH, _METRICS_STAGES_EXPECTED, _LAST_POINTS
-    _LAST_METRICS_PATH = getattr(args, "metrics_json", None)
-    _METRICS_STAGES_EXPECTED = getattr(args, "cascade_stages", None)
-    _LAST_POINTS = getattr(args, "points", None)
-
-    # Resolve effective input path (raster or svg)
-    effective_input = args.input_svg if args.input_svg else args.input
-
-    builtin_geoms = {"delaunay", "voronoi", "rectangles", "svg"}
-    requested_mode = args.geometry
-    is_plugin = False
-    if _geomreg is not None and requested_mode not in builtin_geoms:
-        try:
-            is_plugin = _geomreg.get_geometry(requested_mode) is not None
-        except Exception:
-            is_plugin = False
-
-    # --- SVG INPUT FAST-PATH (avoid PIL on SVGs) -----------------------------
-    if args.input_svg and requested_mode == "svg":
-        out_dir_p = Path(args.output)
-        out_dir_p.mkdir(parents=True, exist_ok=True)
-
-        # Choose deterministic output names
-        png_path = out_dir_p / "frame_svg.png"
-        svg_out = out_dir_p / "frame_svg.svg"
-
-        # Copy input SVG as the exported SVG if requested
-        if args.export_svg:
-            try:
-                shutil.copyfile(args.input_svg, svg_out)
-            except Exception:
-                svg_out.write_text(
-                    '<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8"
-                )
-
-        # Size from SVG attributes; fallback if absent
-        w, h = _parse_svg_size(args.input_svg)
-        _write_png_stub(png_path, (w, h))
-
-        # Print a METRICS line compatible with smoke tests
-        print(
-            "METRICS: "
-            f"mode=svg requested={args.points} sampled=0 corners=0 total_points=0 "
-            f"shapes=0 png={png_path} svg={svg_out if args.export_svg else 'None'}",
-            flush=True,
-        )
-
-        # Optional metrics.json
-        try:
-            if args.metrics_json:
-                metrics_obj = {
-                    "totals": {
-                        "geometry_mode": "svg",
-                        "points": 0,
-                        "seed": args.seed,
-                        "stages": args.cascade_stages,
-                    },
-                    "stages": [],
-                }
-                metrics_obj = _pad_metrics_stages(
-                    metrics_obj, stages_expected=args.cascade_stages
-                )
-                metrics_obj = stabilize_metrics(metrics_obj)
-                with open(args.metrics_json, "w", encoding="utf-8") as f:
-                    json.dump(
-                        _enforce_metrics_contract(
-                            metrics_obj,
-                            getattr(args, "points", None),
-                            getattr(args, "cascade_stages", None),
-                        ),
-                        f,
-                        indent=2,
-                    )
-                print(f"[metrics] Wrote metrics JSON: {args.metrics_json}")
-        except Exception:
-            pass
-
-        # Optional archive manifest
-        if args.archive_manifest:
-            from datetime import datetime as _dt
-
-            manifest = {
-                "input": {"path": args.input_svg, "sha256": _sha256(args.input_svg)},
-                "outputs": [],
-                "created": _dt.utcnow().isoformat(timespec="seconds") + "Z",
-            }
-            if os.path.exists(png_path):
-                manifest["outputs"].append(
-                    {"path": str(png_path), "sha256": _sha256(str(png_path))}
-                )
-            if args.export_svg and os.path.exists(svg_out):
-                manifest["outputs"].append(
-                    {"path": str(svg_out), "sha256": _sha256(str(svg_out))}
-                )
-            with open(args.archive_manifest, "w", encoding="utf-8") as f:
-                json.dump(
-                    _enforce_metrics_contract(
-                        manifest,
-                        getattr(args, "points", None),
-                        getattr(args, "cascade_stages", None),
-                    ),
-                    f,
-                    indent=2,
-                )
-            print(f"[archive] Wrote manifest: {args.archive_manifest}")
-
-        return
-
-    # --- Plugin exec path (tests expect files to exist) ----------------------
-    if args.enable_plugin_exec and is_plugin:
-        png_path, svg_path = _ensure_plugin_outputs(
-            geometry_name=requested_mode,
-            total_points=int(args.points),
-            seed=args.seed,
-            input_path=effective_input,
-            out_dir=args.output,
-        )
-        print(
-            "METRICS: "
-            f"mode=plugin:{requested_mode} "
-            f"requested={args.points} "
-            f"sampled={args.points} "
-            f"corners=0 total_points={args.points} "
-            "shapes=0 "
-            f"png={png_path} "
-            f"svg={svg_path}",
-            flush=True,
-        )
-        return
-
-    # --- Built-in path -------------------------------------------------------
-    try:
-        produced_png, shapes, (width, height), sampled_points, metrics_dict = (
-            run_cubist(
-                input_path=effective_input,
-                output_path=args.output,  # critical: use output_path
-                mask_path=args.mask,
-                total_points=args.points,
-                clip_to_alpha=True,
-                verbose=args.verbose,
-                geometry_mode=requested_mode,
-                use_cascade_fill=args.cascade_fill,
-                save_step_frames=False,
-                seed=args.seed,
-                cascade_stages=args.cascade_stages,
-                svg_limit=args.svg_limit,
-                export_svg=args.export_svg,
-            )
-        )
-    except Exception as e:
-        logger.error(f"run_cubist failed: {e}")
-        print(f"ERROR: run_cubist failed: {e}")
-        sys.exit(2)
-
-    raster_shapes = len(shapes)
-    final_png = produced_png
-    final_svg = None
-
-    # If core didn’t emit SVG and flag requested, try to write a basic one
-    if args.export_svg and not final_svg:
-        try:
-            # If core returned a final_png like ".../frame_XXX.png", write parallel SVG.
-            base = (
-                os.path.splitext(os.path.basename(final_png))[0]
-                if final_png
-                else "frame"
-            )
-            svg_path = (
-                os.path.join(args.output, base + ".svg")
-                if os.path.isdir(args.output)
-                else (os.path.splitext(args.output)[0] + ".svg")
-            )
-            from svg_export import write_svg as _write_svg  # optional if present
-
-            _write_svg(
-                filename=svg_path,
-                shapes=shapes,
-                geometry=requested_mode,
-                width=width,
-                height=height,
-                background=None,
-            )
-            final_svg = svg_path
-        except Exception as _e:
-            logger.error(f"SVG export fallback failed: {_e}")
-
-    sampled_points_count = len(sampled_points) if sampled_points is not None else 0
-    corners_added = 4 if requested_mode in ("delaunay", "voronoi") else 0
-    total_points = sampled_points_count + corners_added
-
-    print(
-        "METRICS: "
-        f"mode={requested_mode} "
-        f"requested={args.points} "
-        f"sampled={sampled_points_count} "
-        f"corners={corners_added} "
-        f"total_points={total_points} "
-        f"shapes={raster_shapes} "
-        f"png={final_png} "
-        f"svg={final_svg or 'None'}",
-        flush=True,
+    # Generate shapes using multiple candidate methods
+    doc_or_shapes = None
+    render_candidates = (
+        "render",
+        "generate",
+        "render_shapes",
+        "run",
+        "build",
+        "make",
+        "create",
     )
 
-    # Metrics JSON (stable)
     try:
-        if args.metrics_json:
-            metrics_obj = metrics_dict or {}
-            totals = metrics_obj.setdefault("totals", {})
-            totals.setdefault("geometry_mode", requested_mode)
-            totals.setdefault("points", args.points)
-            totals.setdefault("seed", args.seed)
-            metrics_obj = _pad_metrics_stages(
-                metrics_obj, stages_expected=args.cascade_stages
-            )
-            metrics_obj = _enforce_metrics_contract(
-                metrics_obj, args.points, args.cascade_stages
-            )
-            metrics_obj = stabilize_metrics(metrics_obj)
-            with open(args.metrics_json, "w", encoding="utf-8") as f:
-                json.dump(
-                    _enforce_metrics_contract(
-                        metrics_obj,
-                        getattr(args, "points", None),
-                        getattr(args, "cascade_stages", None),
-                    ),
-                    f,
-                    indent=2,
-                )
-            print(f"[metrics] Wrote metrics JSON: {args.metrics_json}")
+        for cand in render_candidates:
+            if hasattr(geom_mod, cand):
+                try:
+                    fn = getattr(geom_mod, cand)
+                    sig = inspect.signature(fn)
+                    kwargs = {}
+
+                    # Add parameters that the function accepts
+                    # FIXED: Check for total_points first, then points
+                    if "total_points" in sig.parameters:
+                        kwargs["total_points"] = args.points
+                    elif "points" in sig.parameters:
+                        kwargs["points"] = args.points
+
+                    if "seed" in sig.parameters:
+                        kwargs["seed"] = args.seed
+                    if "cascade_stages" in sig.parameters:
+                        kwargs["cascade_stages"] = args.cascade_stages
+                    if "canvas_size" in sig.parameters:
+                        kwargs["canvas_size"] = canvas_size
+
+                    # Call with appropriate parameters
+                    if cand == "render":
+                        doc_or_shapes = fn(str(inp), **kwargs)
+                    else:
+                        doc_or_shapes = fn(**kwargs)
+                    break
+                except Exception:
+                    continue
     except Exception:
-        pass
+        info["rc"] = 1
+        info["plugin_exc"] = traceback.format_exc()
+        print(json.dumps(info, ensure_ascii=False))
+        return
 
-    # Archive manifest
-    if args.archive_manifest:
-        from datetime import datetime as _dt
+    # Export SVG
+    if args.export_svg:
+        try:
+            exported = False
 
-        manifest = {
-            "input": {"path": effective_input, "sha256": _sha256(effective_input)},
-            "outputs": [],
-            "created": _dt.utcnow().isoformat(timespec="seconds") + "Z",
-        }
-        if final_png and os.path.exists(final_png):
-            manifest["outputs"].append(
-                {"path": final_png, "sha256": _sha256(final_png)}
-            )
-        if final_svg and os.path.exists(final_svg):
-            manifest["outputs"].append(
-                {"path": final_svg, "sha256": _sha256(final_svg)}
-            )
-        with open(args.archive_manifest, "w", encoding="utf-8") as f:
-            json.dump(
-                _enforce_metrics_contract(
-                    manifest,
-                    getattr(args, "points", None),
-                    getattr(args, "cascade_stages", None),
-                ),
-                f,
-                indent=2,
-            )
-        print(f"[archive] Wrote manifest: {args.archive_manifest}")
+            # Try plugin exporters first
+            for export_name in ("export_svg", "save_svg", "write_svg"):
+                if hasattr(geom_mod, export_name):
+                    try:
+                        getattr(geom_mod, export_name)(doc_or_shapes, str(expected_svg))
+                        exported = True
+                        break
+                    except Exception:
+                        continue
 
+            # Try document object exporter
+            if not exported and hasattr(doc_or_shapes, "write_svg"):
+                try:
+                    doc_or_shapes.write_svg(str(expected_svg))
+                    exported = True
+                except Exception:
+                    pass
 
-def _finalize_metrics_file():
-    """Atexit pass to stabilize/pad the metrics file if one was written."""
-    try:
-        mp = _LAST_METRICS_PATH
-        se = _METRICS_STAGES_EXPECTED
-        pts = _LAST_POINTS
-        if not mp or not os.path.exists(mp):
+            # Fallback to svg_export module
+            if not exported:
+                try:
+                    import svg_export
+
+                    svg_content = svg_export.export_svg(
+                        doc_or_shapes, width=canvas_size[0], height=canvas_size[1]
+                    )
+                    with open(str(expected_svg), "w", encoding="utf-8") as f:
+                        f.write(svg_content)
+                    exported = True
+                except Exception as e:
+                    info["rc"] = 1
+                    info["plugin_exc"] = f"ExportError: {e}"
+                    print(json.dumps(info, ensure_ascii=False))
+                    return
+
+            if not exported:
+                info["rc"] = 1
+                info["plugin_exc"] = "No working exporter found"
+                print(json.dumps(info, ensure_ascii=False))
+                return
+
+        except Exception:
+            info["rc"] = 1
+            info["plugin_exc"] = traceback.format_exc()
+            print(json.dumps(info, ensure_ascii=False))
             return
-        with open(mp, "r", encoding="utf-8") as f:
-            obj = json.load(f)
-        obj = _pad_metrics_stages(obj, stages_expected=se)
-        obj = stabilize_metrics(obj)
-        with open(mp, "w", encoding="utf-8") as f:
-            json.dump(
-                _enforce_metrics_contract(obj, pts, se),
-                f,
-                indent=2,
-            )
+
+    # Verify file was written
+    if expected_svg.exists():
+        size = expected_svg.stat().st_size
+        info["outputs"]["svg_exists"] = True
+        info["outputs"]["svg_path"] = str(expected_svg)
+        info["outputs"]["svg_size"] = size
+        info["outputs"]["svg_sha256"] = sha256_file(expected_svg)
+        try:
+            from tools.svg_audit import count_shapes
+
+            info["outputs"]["svg_shapes"] = int(count_shapes(expected_svg))
+        except Exception:
+            info["outputs"]["svg_shapes"] = 0
+    else:
+        folder = expected_svg.parent
+        prefix = expected_svg.stem
+        cand = sorted(p for p in folder.glob("*.svg") if p.stem.startswith(prefix))
+        if cand:
+            p = cand[0]
+            size = p.stat().st_size
+            info["outputs"]["svg_exists"] = True
+            info["outputs"]["svg_path"] = str(p)
+            info["outputs"]["svg_size"] = size
+            info["outputs"]["svg_sha256"] = sha256_file(p)
+        else:
+            info["rc"] = info["rc"] or 2
+
+    info["elapsed_s"] = round(time() - t0, 3)
+    print(json.dumps(info, ensure_ascii=False))
+
+
+def run_pipeline(
+    input: str,
+    output: str,
+    geometry: str,
+    points: int = 4000,
+    seed: int = 42,
+    export_svg: bool = True,
+    cascade_stages: int = 3,
+    enable_plugin_exec: bool = False,
+    pipeline: str | None = None,
+    quiet: bool = True,
+):
+    """Adapter-friendly pipeline used by tests and CLI callers."""
+    from pathlib import Path
+    import sys
+    import os
+    import importlib
+    import inspect
+    import traceback as _tb
+    from time import time as _time
+
+    root = Path(__file__).resolve().parent
+    root_src = root / "src"
+    sys.path.insert(0, str(root))
+    sys.path.insert(0, str(root_src))
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [str(root), str(root_src), os.environ.get("PYTHONPATH", "")]
+    ).strip(os.pathsep)
+
+    inp = Path(input)
+    out_base = Path(output)
+    expected_svg = out_base.with_suffix(".svg")
+
+    _canvas_size = None
+    try:
+        from PIL import Image
+
+        with Image.open(str(inp)) as _im:
+            _canvas_size = _im.size
     except Exception:
-        # Silent by design; finalization should never crash the process
         pass
+    if _canvas_size is None:
+        _canvas_size = (1200, 800)
 
+    info = {
+        "ts": None,
+        "input": str(inp),
+        "output": str(out_base),
+        "geometry": geometry,
+        "points": int(points),
+        "seed": int(seed),
+        "rc": 0,
+        "outputs": {
+            "expected_svg": str(expected_svg),
+            "svg_exists": False,
+            "svg_path": None,
+            "svg_size": 0,
+            "svg_sha256": "",
+            "svg_shapes": 0,
+        },
+        "plugin_exc": "",
+        "forced_write": False,
+        "forced_write_reason": "",
+    }
 
-atexit.register(_finalize_metrics_file)
+    def _call_with_best_effort(fn, *a, **k):
+        sig = inspect.signature(fn)
+        use = {}
+        accepts_kwargs = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        )
+        for key, val in dict(k).items():
+            if key in sig.parameters or accepts_kwargs:
+                use[key] = val
+        return fn(*a, **use)
+
+    def _get_attr(container, name):
+        try:
+            if container is None:
+                return None
+            if isinstance(container, dict):
+                return container.get(name)
+            if hasattr(container, name):
+                return getattr(container, name)
+        except Exception:
+            return None
+
+    t0 = _time()
+
+    try:
+        geom_mod = load_geometry(geometry)
+    except Exception as e:
+        info["rc"] = 1
+        info["plugin_exc"] = f"ImportError: {e}"
+        info["elapsed_s"] = round(_time() - t0, 3)
+        return info
+
+    reg = None
+    try:
+        if hasattr(geom_mod, "register"):
+            reg = _call_with_best_effort(geom_mod.register, canvas_size=_canvas_size)
+    except Exception:
+        reg = None
+
+    try:
+        expected_svg.parent.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        info["rc"] = 1
+        info["plugin_exc"] = f"DirError: {e}"
+        info["elapsed_s"] = round(_time() - t0, 3)
+        return info
+
+    doc_or_shapes = None
+    render_candidates = (
+        _get_attr(reg, "render")
+        or _get_attr(reg, "generate")
+        or _get_attr(reg, "render_shapes"),
+        "render",
+        "generate",
+        "render_shapes",
+        "run",
+        "build",
+        "make",
+        "create",
+    )
+    try:
+        for cand in render_candidates:
+            if callable(cand):
+                doc_or_shapes = _call_with_best_effort(
+                    cand,
+                    str(inp),
+                    total_points=int(points),  # FIXED: Use total_points
+                    points=int(points),  # Keep points for legacy compatibility
+                    seed=int(seed),
+                    cascade_stages=int(cascade_stages),
+                    input=str(inp),
+                    input_path=str(inp),
+                    image=str(inp),
+                    path=str(inp),
+                    canvas_size=_canvas_size,
+                )
+                break
+            elif isinstance(cand, str) and hasattr(geom_mod, cand):
+                doc_or_shapes = _call_with_best_effort(
+                    getattr(geom_mod, cand),
+                    total_points=int(points),  # FIXED: Use total_points
+                    points=int(points),  # Keep points for legacy compatibility
+                    seed=int(seed),
+                    cascade_stages=int(cascade_stages),
+                    canvas_size=_canvas_size,
+                )
+                break
+    except Exception:
+        info["rc"] = 1
+        info["plugin_exc"] = _tb.format_exc()
+
+    def _write_svg_from(doc_or_shapes, out_path: Path):
+        # 1) Try plugin exporters
+        for container in (geom_mod, reg):
+            for name in ("export_svg", "save_svg", "write_svg"):
+                fn = _get_attr(container, name)
+                if callable(fn):
+                    try:
+                        return fn(doc_or_shapes, str(out_path))
+                    except Exception:
+                        try:
+                            return fn(str(inp), str(out_path))
+                        except Exception:
+                            try:
+                                return _call_with_best_effort(
+                                    fn,
+                                    input=str(inp),
+                                    output=str(out_path),
+                                    canvas_size=_canvas_size,
+                                    doc=doc_or_shapes,
+                                    shapes=doc_or_shapes,
+                                )
+                            except Exception:
+                                pass
+        # 3) Fallback: repo svg_export helpers
+        try:
+            svg_export = importlib.import_module("svg_export")
+            for name in ("export_svg", "write_svg", "save_svg"):
+                if hasattr(svg_export, name):
+                    fn = getattr(svg_export, name)
+                    if name == "export_svg":
+                        # Fix: export_svg expects (shapes, width, height) but we need to write to file
+                        svg_content = fn(
+                            doc_or_shapes, width=_canvas_size[0], height=_canvas_size[1]
+                        )
+                        with open(str(out_path), "w", encoding="utf-8") as f:
+                            f.write(svg_content)
+                        print(
+                            f"SVG export success: wrote {len(doc_or_shapes)} shapes to {out_path}"
+                        )
+                        return True
+                    else:
+                        result = fn(doc_or_shapes, str(out_path))
+                        print(
+                            f"SVG export success: wrote {len(doc_or_shapes)} shapes to {out_path}"
+                        )
+                        return result
+        except Exception as e:
+            print(f"SVG export failed: {e}")
+            pass
+        raise RuntimeError(
+            "No exporter found (plugin/register/export helpers unavailable)"
+        )
+
+    if export_svg and info["rc"] == 0:
+        try:
+            _write_svg_from(doc_or_shapes, expected_svg)
+        except Exception:
+            info["rc"] = 1
+            info["plugin_exc"] = _tb.format_exc()
+
+    if expected_svg.exists():
+        size = expected_svg.stat().st_size
+        info["outputs"]["svg_exists"] = True
+        info["outputs"]["svg_path"] = str(expected_svg)
+        info["outputs"]["svg_size"] = size
+        try:
+            from tools.svg_audit import count_shapes
+
+            info["outputs"]["svg_shapes"] = int(count_shapes(expected_svg))
+        except Exception:
+            info["outputs"]["svg_shapes"] = 0
+        try:
+            from hashlib import sha256
+
+            with open(expected_svg, "rb") as f:
+                info["outputs"]["svg_sha256"] = sha256(f.read()).hexdigest()
+        except Exception:
+            pass
+    else:
+        info["rc"] = info["rc"] or 2
+
+    info["elapsed_s"] = round(_time() - t0, 3)
+    return info
+
 
 if __name__ == "__main__":
     main()
-
-
-# === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.7 - stamped 2025-09-01T13:31:44+02:00
-# === CUBIST FOOTER STAMP END ===

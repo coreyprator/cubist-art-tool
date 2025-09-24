@@ -124,6 +124,12 @@ def load_plugins(directory: str | Path) -> None:
     print(f"[plugins] load complete: dir={dir_path} names={summary}", flush=True)
 
 
+# Public helper for tests and tooling
+def list_geometries():
+    """Return an iterable of registered geometry names."""
+    return sorted(_REGISTRY.keys())
+
+
 # === CUBIST FOOTER STAMP BEGIN ===
 # End of file - v2.3.7 - stamped 2025-09-01T13:31:45+02:00
 # === CUBIST FOOTER STAMP END ===

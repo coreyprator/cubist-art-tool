@@ -1,17 +1,20 @@
 {
-  "input_image": "G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg",
-  "points": 3000,
-  "seed": 42,
-  "cascade_stages": 0,
-  "export_svg": true,
-  "enable_plugin_exec": true,
-  "clean_production_base": false,
-  "show_files_in_summary": true,
-  "scatter_circles": true,
-  "selected": {
-    "delaunay": false,
-    "voronoi": false,
-    "rectangles": false,
-    "plugins": []
-  }
+  "input_img": "G:/My Drive/Code/Python/cubist_art/input/your_input_image.jpg",
+  "points": "1000",
+  "seed": "42",
+  "cascade": "3",
+  "export_svg": 1,
+  "plugin_exec": 1,
+  "builtins": {
+    "delaunay": 1,
+    "voronoi": 1,
+    "rectangles": 1
+  },
+  "plugins": {
+    "poisson_disk": 1,
+    "scatter_circles": 1,
+    "toy_triangles": 1
+  },
+  "svg_passthrough": 0,
+  "input_svg": ""
 }
