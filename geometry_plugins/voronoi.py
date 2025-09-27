@@ -39,12 +39,14 @@ def generate(
                 # Calculate polygon centroid for color sampling
                 centroid_x = sum(x for x, y in poly) / len(poly)
                 centroid_y = sum(y for x, y in poly) / len(poly)
-                
+
                 shapes.append(
                     {
                         "type": "polygon",
                         "points": [(float(x), float(y)) for x, y in poly],
-                        "fill": _sample_image_color(input_image, centroid_x, centroid_y, width, height),
+                        "fill": _sample_image_color(
+                            input_image, centroid_x, centroid_y, width, height
+                        ),
                         "stroke": (0, 0, 0),
                         "stroke_width": 0.5,
                     }
@@ -64,9 +66,9 @@ def generate(
     radius = max(1.0, 0.0075 * min(width, height))
     return [
         {
-            "type": "circle", 
-            "cx": float(x), 
-            "cy": float(y), 
+            "type": "circle",
+            "cx": float(x),
+            "cy": float(y),
             "r": float(radius),
             "fill": _sample_image_color(input_image, x, y, width, height),
             "stroke": "none",
@@ -79,27 +81,29 @@ def register(register_fn) -> None:
     register_fn(PLUGIN_NAME, generate)
 
 
-def _sample_image_color(input_image, x: float, y: float, canvas_width: int, canvas_height: int) -> Tuple[int, int, int]:
+def _sample_image_color(
+    input_image, x: float, y: float, canvas_width: int, canvas_height: int
+) -> Tuple[int, int, int]:
     """Sample color from input image at given coordinates, with fallback to gray if no image."""
     if input_image is None:
         # Fallback to a neutral gray if no image provided
         return (128, 128, 128)
-    
+
     try:
         # Get image dimensions
         img_width, img_height = input_image.size
-        
+
         # Map canvas coordinates to image coordinates
         img_x = int((x / canvas_width) * img_width)
         img_y = int((y / canvas_height) * img_height)
-        
+
         # Clamp coordinates to image bounds
         img_x = max(0, min(img_width - 1, img_x))
         img_y = max(0, min(img_height - 1, img_y))
-        
+
         # Sample pixel color
         pixel = input_image.getpixel((img_x, img_y))
-        
+
         # Handle different image modes
         if isinstance(pixel, tuple):
             if len(pixel) >= 3:
@@ -111,11 +115,11 @@ def _sample_image_color(input_image, x: float, y: float, canvas_width: int, canv
         else:
             # Single value (grayscale)
             return (int(pixel), int(pixel), int(pixel))
-            
+
     except Exception:
         # Fallback to gray if sampling fails
         return (128, 128, 128)
-    
+
     # Default fallback
     return (128, 128, 128)
 

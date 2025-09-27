@@ -611,7 +611,7 @@ def _generate_gallery(
         if success and svg_path.exists():
             # FIXED: Better wrapper with proper SVG fitting
             try:
-                wrapper_html = f"""<!doctype html>
+                wrapper_html = """<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 html,body{{height:100%;margin:0;padding:0;background:#111;overflow:hidden}}
@@ -718,7 +718,7 @@ object{{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain
         preview_html = f'<div style="display:flex;align-items:center;gap:18px;margin-bottom:16px"><div><h3>Input preview</h3><a href="{preview_rel}" target="_blank"><img src="{preview_rel}" style="max-width:420px;max-height:300px;border:1px solid #ccc"></a></div><div>{input_palette_html}</div></div>'
 
     # FIXED: Added f before the string to make it an f-string
-    html_content = f"""
+    html_content = """
 	<!DOCTYPE html>
 	<html>
 	<head>

@@ -135,8 +135,8 @@ def main():
         with Image.open(str(inp)) as img:
             canvas_size = img.size
             # Convert to RGB if needed and keep a copy for geometry plugins
-            if img.mode != 'RGB':
-                input_image = img.convert('RGB')
+            if img.mode != "RGB":
+                input_image = img.convert("RGB")
             else:
                 input_image = img.copy()
     except Exception:
@@ -318,8 +318,8 @@ def run_pipeline(
         with Image.open(str(inp)) as _im:
             _canvas_size = _im.size
             # Convert to RGB if needed and keep a copy for geometry plugins
-            if _im.mode != 'RGB':
-                _input_image = _im.convert('RGB')
+            if _im.mode != "RGB":
+                _input_image = _im.convert("RGB")
             else:
                 _input_image = _im.copy()
     except Exception:

@@ -210,7 +210,13 @@ def generate(
     **kwargs,
 ) -> List[dict]:  # Changed return type annotation
     # Call scatter_circles which now returns dict format
-    return scatter_circles(canvas_size, total_points=total_points, seed=seed, input_image=input_image, **kwargs)
+    return scatter_circles(
+        canvas_size,
+        total_points=total_points,
+        seed=seed,
+        input_image=input_image,
+        **kwargs,
+    )
 
 
 # Registry support (used when not in plugin–exec mode)
@@ -220,27 +226,29 @@ def register(register_geometry: Callable[[str, Callable[..., Iterable]], None]) 
     register_geometry("scatter_circles", scatter_circles)
 
 
-def _sample_image_color(input_image, x: float, y: float, canvas_width: int, canvas_height: int) -> Tuple[int, int, int]:
+def _sample_image_color(
+    input_image, x: float, y: float, canvas_width: int, canvas_height: int
+) -> Tuple[int, int, int]:
     """Sample color from input image at given coordinates, with fallback to gray if no image."""
     if input_image is None:
         # Fallback to a neutral gray if no image provided
         return (128, 128, 128)
-    
+
     try:
         # Get image dimensions
         img_width, img_height = input_image.size
-        
+
         # Map canvas coordinates to image coordinates
         img_x = int((x / canvas_width) * img_width)
         img_y = int((y / canvas_height) * img_height)
-        
+
         # Clamp coordinates to image bounds
         img_x = max(0, min(img_width - 1, img_x))
         img_y = max(0, min(img_height - 1, img_y))
-        
+
         # Sample pixel color
         pixel = input_image.getpixel((img_x, img_y))
-        
+
         # Handle different image modes
         if isinstance(pixel, tuple):
             if len(pixel) >= 3:
@@ -252,11 +260,11 @@ def _sample_image_color(input_image, x: float, y: float, canvas_width: int, canv
         else:
             # Single value (grayscale)
             return (int(pixel), int(pixel), int(pixel))
-            
+
     except Exception:
         # Fallback to gray if sampling fails
         return (128, 128, 128)
-    
+
     # Default fallback
     return (128, 128, 128)
 
