@@ -1,0 +1,64 @@
+RULES (read carefully; apply before anything else)
+R1. Return ENTIRE FILES only, never diffs or snippets.
+R2. Preserve all logging / progress / history features unchanged.
+R3. No prose outside file blocks. One file per block.
+
+OUTPUT CONTRACT
+- Use file blocks delimited by: ```file ... ```
+- Fields required in each block: path, language, contents
+- One file per block. Emit ENTIRE FILES only.
+
+EXAMPLE
+```file
+path: src/module.py
+language: python
+contents:
+<full file contents here>
+```
+
+SENTINELS
+- Start marker: ### FILE OUTPUT START relative file name, line count  ###
+- End marker: ### END OF OUTPUT ###
+- Self-check line (must appear before first file block): ✔ R1 ✔ R2 ✔ R3
+
+SCENARIO: Refactor
+DESCRIPTION: Improve structure/clarity without changing interfaces or removing logging/progress/history features.
+
+TASK
+improve the usability of promptforge app
+
+CONTEXT
+Make promptforge easier to use. Add field explanations. Add capability to update the app to make it usable with tooltips and other helpful explanations.
+
+TARGETS
+promptforge.py /promptforge-README.md promptforge.JSON
+
+GOALS
+1. Present field usage of the app using tool tips (or help file if tool tips is not possible)
+2. Make the promptforge app more usable edit content from the app itself
+3. Add new scenarios and fields to promptforge app from within the promptforge app itself.
+4. persist changes and update configuration file
+5. Bootstrap the content tool tips from existing help, current or revised readme content for each scenario and field.
+6. Expand help content with current best practices for each scenario and field
+7. Save the output to a file or, database so that a prompt or content can be retrieved for future cases.
+
+CONSTRAINTS
+(none)
+
+EXTRA DIRECTIVES
+- Preserve all logging/progress/history features unchanged (R2).
+- Emit ENTIRE FILES only (R1), no diffs.
+- No prose outside file blocks (R3).
+
+RESPONSE REQUIREMENTS
+1) First line must be the self-check line exactly as below.
+2) Then emit the start sentinel.
+3) Then only file blocks per OUTPUT CONTRACT.
+4) Finish with the end sentinel.
+
+SELF-CHECK LINE
+✔ R1 ✔ R2 ✔ R3
+
+BEGIN RESPONSE WITH:
+✔ R1 ✔ R2 ✔ R3
+### FILE OUTPUT START relative file name, line count  ###

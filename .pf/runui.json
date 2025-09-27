@@ -1,0 +1,20 @@
+{
+  "name": "Cubist Art Production UI",
+  "version": "2.3.7",
+  "type": "python_web",
+  "launch": {
+    "command": "python",
+    "args": ["tools/prod_ui.py"],
+    "working_dir": ".",
+    "env": {
+      "PYTHONPATH": "."
+    }
+  },
+  "precheck": {
+    "files": ["tools/prod_ui.py", "cubist_cli.py"],
+    "python_modules": ["flask", "pathlib", "json"]
+  },
+  "description": "Advanced production batch runner for cubist art generation with real-time logging",
+  "ports": [5123],
+  "auto_open_browser": true
+}

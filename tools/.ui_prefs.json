@@ -1,0 +1,19 @@
+{
+  "input_path": "G:\\My Drive\\Code\\Python\\cubist_art\\input\\x_your_input_image.jpg",
+  "geoms": [
+    "poisson_disk",
+    "scatter_circles",
+    "rectangles",
+    "voronoi",
+    "delaunay",
+    "concentric_circles"
+  ],
+  "points": 4000,
+  "seed": 42,
+  "cascade_stages": 3,
+  "export_svg": true,
+  "enable_plugin_exec": true,
+  "force_append_svg": true,
+  "autolaunch_gallery": true,
+  "verbose": true
+}

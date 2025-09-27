@@ -1,0 +1,19 @@
+{
+  "geoms": [
+    "poisson_disk",
+    "scatter_circles",
+    "rectangles",
+    "voronoi",
+    "delaunay",
+    "concentric_circles"
+  ],
+  "last_outdir": "G:\\My Drive\\Code\\Python\\cubist_art\\output\\production\\20250905-011356",
+  "input": "G:\\My Drive\\Code\\Python\\cubist_art\\input\\x_your_input_image.jpg",
+  "points": 4000,
+  "seed": 123,
+  "cascade": 3,
+  "export_svg": true,
+  "enable_plugin_exec": false,
+  "verbose_probe": true,
+  "auto_open": true
+}

@@ -1,0 +1,11 @@
+{
+  "selected": [
+    "poisson_disk",
+    "scatter_circles",
+    "rectangles",
+    "voronoi"
+  ],
+  "points": 4000,
+  "seed": 42,
+  "cascade_stages": 3
+}

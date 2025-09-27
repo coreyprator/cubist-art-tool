@@ -1,0 +1,9 @@
+{
+  "input_path": "G:\\My Drive\\Code\\Python\\cubist_art\\input\\x_your_input_image.jpg",
+  "output_base": "G:\\My Drive\\Code\\Python\\cubist_art\\output",
+  "verbose": true,
+  "points": 4000,
+  "seed": 42,
+  "cascade_stages": 3,
+  "enable_plugins": true
+}

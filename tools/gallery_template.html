@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gallery: {timestamp}</title>
+  <style>
+    body {{
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 20px;
+      background: #0b0b0b;
+      color: #eef;
+    }}
+    h1 {{
+      margin-bottom: 16px;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 16px;
+    }}
+    .card {{
+      background: #151515;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.35);
+    }}
+    .svg-container {{
+      width: 100%;
+      height: 480px;
+      border-radius: 8px;
+      background: #111;
+      overflow: hidden;
+      cursor: pointer;
+    }}
+    .svg-container object {{
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }}
+    .info {{
+      margin-top: 8px;
+      color: #b8c7e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }}
+    .info a {{
+      color: #8bd;
+      text-decoration: none;
+    }}
+    .info a:hover {{
+      text-decoration: underline;
+    }}
+    .fullscreen-overlay {{
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.9);
+      z-index: 1000;
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }}
+    .fullscreen-content {{
+      max-width: 90vw;
+      max-height: 90vh;
+      position: relative;
+      border-radius: 4px;
+      overflow: hidden;
+    }}
+    .fullscreen-content object {{
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }}
+    .fullscreen-close {{
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }}
+    .warn {{
+      color: #f88;
+    }}
+  </style>
+</head>
+<body>
+  <h1>Gallery: {timestamp}</h1>
+  <div class="grid">
+    {geometry_cards}
+  </div>
+
+  <div id="fullscreen" class="fullscreen-overlay">
+    <div class="fullscreen-content">
+      <button class="fullscreen-close" onclick="hideFullscreen()">✕</button>
+      <object id="fullscreen-svg" data="" type="image/svg+xml"></object>
+    </div>
+  </div>
+
+  <script>
+    function showFullscreen(path) {{
+      document.getElementById('fullscreen-svg').data = path;
+      document.getElementById('fullscreen').style.display = 'flex';
+      // Prevent scrolling when fullscreen is open
+      document.body.style.overflow = 'hidden';
+    }}
+
+    function hideFullscreen() {{
+      document.getElementById('fullscreen').style.display = 'none';
+      // Re-enable scrolling
+      document.body.style.overflow = '';
+    }}
+
+    // Also close on escape key
+    document.addEventListener('keydown', function(e) {{
+      if (e.key === 'Escape') {{
+        hideFullscreen();
+      }}
+    }});
+
+    // Close on clicking outside the content
+    document.getElementById('fullscreen').addEventListener('click', function(e) {{
+      if (e.target === this) {{
+        hideFullscreen();
+      }}
+    }});
+  </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.4.1, pluggy-1.6.0 -- G:\My Drive\Code\Python\cubist_art\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+Python 3.13.7 on Windows 11
+PyTest verbosity: -vv
+Report: -rA (passes, skips, xfails, errors shown); timings: --durations=10
+rootdir: G:\My Drive\Code\Python\cubist_art
+configfile: pytest.ini
+plugins: dash-2.18.2
+collecting ... collected 11 items
+
+============================ no tests ran in 1.97s ============================

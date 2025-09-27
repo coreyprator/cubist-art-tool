@@ -1,0 +1,72 @@
+{
+  "project_name": "My Project",
+  "rules": [
+    {
+      "id": "R1",
+      "text": "Return ENTIRE FILES only, never diffs or snippets."
+    },
+    {
+      "id": "R2",
+      "text": "Preserve all logging / progress / history features unchanged."
+    },
+    {
+      "id": "R3",
+      "text": "No prose outside file blocks. One file per block."
+    }
+  ],
+  "sentinels": {
+    "start": "### FILE OUTPUT START ###",
+    "end": "### END OF OUTPUT ###",
+    "self_check_line": "\u2714 R1 \u2714 R2 \u2714 R3"
+  },
+  "output_contract": {
+    "file_block": {
+      "start": "```file",
+      "end": "```",
+      "fields": [
+        "path",
+        "language",
+        "contents"
+      ],
+      "example": "```file\npath: src/module.py\nlanguage: python\ncontents:\n<full file contents>\n```"
+    }
+  },
+  "style": {
+    "tone": "concise",
+    "language": "en-US"
+  },
+  "scenarios": {
+    "troubleshooting": {
+      "title": "Troubleshooting",
+      "description": "Debug with full-file outputs.",
+      "sections": [
+        {
+          "label": "CONTEXT",
+          "prompt": "Brief system/project context"
+        },
+        {
+          "label": "ERRORS",
+          "prompt": "Paste error messages/log excerpts"
+        },
+        {
+          "label": "OBSERVED_BEHAVIOR",
+          "prompt": "What happens now"
+        },
+        {
+          "label": "EXPECTED_BEHAVIOR",
+          "prompt": "What should happen"
+        },
+        {
+          "label": "REPRO_STEPS",
+          "prompt": "Steps to reproduce"
+        }
+      ],
+      "extra_directives": [
+        "Emit ENTIRE FILES per OUTPUT CONTRACT.",
+        "One file per block; no prose outside blocks."
+      ]
+    }
+  },
+  "clipboard": true,
+  "write_default_output_file": true
+}

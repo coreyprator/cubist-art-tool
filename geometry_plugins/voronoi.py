@@ -1,4 +1,4 @@
-# cubist_art v2.3.7 — geometry plugin: Voronoi
+# cubist_art v2.3.7 – geometry plugin: Voronoi
 # File: geometry_plugins/voronoi.py
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ def generate(
     total_points: int = 128,
     seed: int = 0,
     seed_points: Optional[List[Tuple[float, float]]] = None,
+    input_image=None,
     **params,
 ) -> List[Dict]:
     width, height = canvas_size
@@ -35,14 +36,15 @@ def generate(
         for region, site_idx in regions:
             poly = _clip_poly_to_bbox(region, (0.0, 0.0, float(width), float(height)))
             if len(poly) >= 3:
-                rcol = (37 * (site_idx + 1)) % 255
-                gcol = (71 * (site_idx + 3)) % 255
-                bcol = (113 * (site_idx + 7)) % 255
+                # Calculate polygon centroid for color sampling
+                centroid_x = sum(x for x, y in poly) / len(poly)
+                centroid_y = sum(y for x, y in poly) / len(poly)
+                
                 shapes.append(
                     {
                         "type": "polygon",
                         "points": [(float(x), float(y)) for x, y in poly],
-                        "fill": (rcol, gcol, bcol),
+                        "fill": _sample_image_color(input_image, centroid_x, centroid_y, width, height),
                         "stroke": (0, 0, 0),
                         "stroke_width": 0.5,
                     }
@@ -61,13 +63,61 @@ def generate(
         pass
     radius = max(1.0, 0.0075 * min(width, height))
     return [
-        {"type": "circle", "cx": float(x), "cy": float(y), "r": float(radius)}
+        {
+            "type": "circle", 
+            "cx": float(x), 
+            "cy": float(y), 
+            "r": float(radius),
+            "fill": _sample_image_color(input_image, x, y, width, height),
+            "stroke": "none",
+        }
         for (x, y) in pts
     ]
 
 
 def register(register_fn) -> None:
     register_fn(PLUGIN_NAME, generate)
+
+
+def _sample_image_color(input_image, x: float, y: float, canvas_width: int, canvas_height: int) -> Tuple[int, int, int]:
+    """Sample color from input image at given coordinates, with fallback to gray if no image."""
+    if input_image is None:
+        # Fallback to a neutral gray if no image provided
+        return (128, 128, 128)
+    
+    try:
+        # Get image dimensions
+        img_width, img_height = input_image.size
+        
+        # Map canvas coordinates to image coordinates
+        img_x = int((x / canvas_width) * img_width)
+        img_y = int((y / canvas_height) * img_height)
+        
+        # Clamp coordinates to image bounds
+        img_x = max(0, min(img_width - 1, img_x))
+        img_y = max(0, min(img_height - 1, img_y))
+        
+        # Sample pixel color
+        pixel = input_image.getpixel((img_x, img_y))
+        
+        # Handle different image modes
+        if isinstance(pixel, tuple):
+            if len(pixel) >= 3:
+                # RGB or RGBA
+                return (int(pixel[0]), int(pixel[1]), int(pixel[2]))
+            elif len(pixel) == 1:
+                # Grayscale
+                return (int(pixel[0]), int(pixel[0]), int(pixel[0]))
+        else:
+            # Single value (grayscale)
+            return (int(pixel), int(pixel), int(pixel))
+            
+    except Exception:
+        # Fallback to gray if sampling fails
+        return (128, 128, 128)
+    
+    # Default fallback
+    return (128, 128, 128)
 
 
 def _voronoi_finite_polygons_2d(voronoi) -> List[Tuple[List[Tuple[float, float]], int]]:

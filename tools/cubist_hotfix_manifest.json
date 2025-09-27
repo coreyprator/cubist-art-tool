@@ -1,0 +1,29 @@
+{
+  "files": [
+    {
+      "path": "tools/run_cli.py",
+      "sha256": "37a14246677975225ae6c6ebce751796014176e478c7093b87de7321623d609e",
+      "lines": 97
+    },
+    {
+      "path": "cubist_cli.py",
+      "sha256": "89bd727ef91638044f5a2910a54a344829655ccf023c1180c89fc629db138b13",
+      "lines": 147
+    },
+    {
+      "path": "tools/diagnostics/plugin_env_probe.py",
+      "sha256": "d606d6fae11f7547940192c9344149dd203b411ab47a929a5dcdf01082fa2cf8",
+      "lines": 25
+    },
+    {
+      "path": "tools/svg_audit.py",
+      "sha256": "5ad50fb727322eb6ff693e8ac151a79e3c15f6881d7a2c08aeb18d80e4d63a08",
+      "lines": 14
+    },
+    {
+      "path": "tools/prod_ui.py",
+      "sha256": "baed572ddb9d71c6f9de750398be2f82b7d708006284c554ec5e52849194fba7",
+      "lines": 227
+    }
+  ]
+}

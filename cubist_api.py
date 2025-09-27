@@ -98,7 +98,39 @@ def _normalize_kwargs(args, kwargs):
     return {k: v for k, v in kwargs.items() if k in allowed}
 
 
-def run_cubist(*args, **kwargs):
+def run_cubist(
+    input_path,
+    output_path=None,
+    geometry=None,
+    points=None,
+    cascade_fill=None,
+    cascade_stages=None,
+    seed=None,
+    export_svg=None,
+    svg_limit=None,
+    metrics_json=None,
+    mask_path=None,
+    **kwargs,
+):
+    """Run the Cubist Art pipeline.
+
+    Args:
+        input_path: Path to input image
+        output_path: Path to output SVG
+        geometry: Geometry name (delaunay, voronoi, etc.)
+        points: Number of points to generate
+        cascade_fill: Fill type (image, solid, none)
+        cascade_stages: Number of cascade stages
+        seed: Random seed
+        export_svg: Whether to export SVG
+        svg_limit: Limit the number of shapes in SVG
+        metrics_json: Path to metrics JSON
+        mask_path: Path to mask image
+        **kwargs: Additional arguments
+
+    Returns:
+        Tuple[int, int, List[dict]]: (width, height, shapes)
+    """
     kw = _normalize_kwargs(args, dict(kwargs))
 
     # Try modern in-core pipeline first (resolved at call time).
@@ -117,3 +149,42 @@ def run_cubist(*args, **kwargs):
             "run_cubist fallback failed: cubist_cli.run_pipeline not available"
         ) from e
     return _cli_run(**kw)
+
+    # Generate shapes based on geometry
+    shapes = generate_shapes(...)
+
+    # Important: Apply color sampling if input_path is an image
+    # Add this code before returning shapes
+    if input_path and Path(input_path).is_file():
+        from PIL import Image
+
+        try:
+            with Image.open(input_path) as img:
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+
+                width, height = img.size
+
+                for shape in shapes:
+                    # Get coordinates based on shape type
+                    if shape.get("type") == "circle":
+                        x, y = shape.get("cx", 0), shape.get("cy", 0)
+                    elif "points" in shape and shape["points"]:
+                        # For polygons, use the centroid
+                        points = shape["points"]
+                        x = sum(p[0] for p in points) / len(points)
+                        y = sum(p[1] for p in points) / len(points)
+                    else:
+                        continue
+
+                    # Ensure coordinates are within image bounds
+                    x = max(0, min(int(x), width - 1))
+                    y = max(0, min(int(y), height - 1))
+
+                    # Sample color from image and set fill
+                    r, g, b = img.getpixel((x, y))
+                    shape["fill"] = f"rgb({r},{g},{b})"
+        except Exception as e:
+            print(f"Warning: Color sampling failed: {e}")
+
+    return width, height, shapes

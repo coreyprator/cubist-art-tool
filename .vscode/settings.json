@@ -1,19 +1,24 @@
 {
-  "python.defaultInterpreterPath": ".venv\\Scripts\\python.exe",
-  "python.terminal.activateEnvironment": true,
-  "python.terminal.activateEnvInCurrentTerminal": true,
-  "terminal.integrated.env.windows": {
-    "PYTHONPATH": "${workspaceFolder}"
+  "python.defaultInterpreterPath": "C:/venvs/cubist_art-3.12/Scripts/python.exe",
+  "python.terminal.activateEnvironment": false,
+  "workbench.colorCustomizations": {
+    "activityBar.activeBackground": "#00b300",
+    "activityBar.background": "#00b300",
+    "activityBar.foreground": "#e7e7e7",
+    "activityBar.inactiveForeground": "#e7e7e799",
+    "activityBarBadge.background": "#dfdfff",
+    "activityBarBadge.foreground": "#15202b",
+    "commandCenter.border": "#e7e7e799",
+    "sash.hoverBorder": "#00b300",
+    "statusBar.background": "#008000",
+    "statusBar.foreground": "#e7e7e7",
+    "statusBarItem.hoverBackground": "#00b300",
+    "statusBarItem.remoteBackground": "#008000",
+    "statusBarItem.remoteForeground": "#e7e7e7",
+    "titleBar.activeBackground": "#008000",
+    "titleBar.activeForeground": "#e7e7e7",
+    "titleBar.inactiveBackground": "#00800099",
+    "titleBar.inactiveForeground": "#e7e7e799"
   },
-  "python.testing.pytestEnabled": true,
-  "python.testing.pytestArgs": [
-    "tests"
-  ],
-  "python.linting.enabled": true,
-  "python.linting.pylintEnabled": false,
-  "python.linting.flake8Enabled": true,
-  "files.exclude": {
-    "**/__pycache__": true,
-    "**/*.pyc": true
-  }
+  "peacock.color": "green"
 }

@@ -1,0 +1,195 @@
+{
+  "project_name": "V2.3.7 Cubist Art",
+  "rules": [
+    {
+      "id": "R1",
+      "text": "Return ENTIRE FILES only in individual canvas, or packaged in a Zip package, never diffs or snippets."
+    },
+    {
+      "id": "R2",
+      "text": "Preserve all logging / progress / history features unchanged."
+    },
+    {
+      "id": "R4",
+      "text": "Deliver only smoke-tested, parsable, executable full files (no prose/headers). Validate syntax & imports; keep logging/progress/history; include dependencies."
+    },
+    {
+      "id": "R5",
+      "text": "Preserve and update required file headers/footers. Include (at minimum) relative path, purpose/usage, and an ISO8601 timestamp at the top; include a footer with ending line-count if the project requires it. Do not remove/alter existing headers/footers—update them in place."
+    }
+  ],
+  "sentinels": {
+    "start": "### FILE OUTPUT START relative file name, line count  ###",
+    "end": "END OF OUTPUT",
+    "self_check_line": "✔ R1 ✔ R2 ✔ R3"
+  },
+  "output_contract": {
+    "file_block": {
+      "start": "```file",
+      "end": "```",
+      "fields": [
+        "path",
+        "language",
+        "contents"
+      ],
+      "example": "```file\npath: src/module.py\nlanguage: python\ncontents:\n<full file contents here>\n```"
+    }
+  },
+  "style": {
+    "tone": "concise",
+    "language": "en-US"
+  },
+  "scenarios": {
+    "troubleshooting": {
+      "title": "Troubleshooting",
+      "description": "Provide debugging guidance and code changes while obeying rule R1 (full files) and R2 (logging preserved).",
+      "sections": [
+        {
+          "label": "CONTEXT",
+          "prompt": "Brief system/project context"
+        },
+        {
+          "label": "ERRORS",
+          "prompt": "Paste error messages/log excerpts"
+        },
+        {
+          "label": "OBSERVED_BEHAVIOR",
+          "prompt": "What happens now"
+        },
+        {
+          "label": "EXPECTED_BEHAVIOR",
+          "prompt": "What should happen"
+        },
+        {
+          "label": "REPRO_STEPS",
+          "prompt": "Steps to reproduce"
+        }
+      ],
+      "extra_directives": [
+        "When proposing code changes, emit ENTIRE FILES per OUTPUT CONTRACT.",
+        "If multiple files are needed, emit one file block per file.",
+        "If you must explain, create a separate META.md as a full file block."
+      ]
+    },
+    "refactor": {
+      "title": "Refactor",
+      "description": "Improve structure/clarity without changing interfaces or removing logging/progress/history features.",
+      "sections": [
+        {
+          "label": "CONTEXT",
+          "prompt": "Current architecture notes"
+        },
+        {
+          "label": "TARGETS",
+          "prompt": "Files or modules to refactor"
+        },
+        {
+          "label": "GOALS",
+          "prompt": "What to improve (readability, cohesion, etc.)"
+        },
+        {
+          "label": "CONSTRAINTS",
+          "prompt": "Must-keep behaviors and APIs"
+        }
+      ],
+      "extra_directives": [
+        "Preserve all logging/progress/history features unchanged (R2).",
+        "Emit ENTIRE FILES only (R1), no diffs.",
+        "No prose outside file blocks (R3)."
+      ]
+    },
+    "feature": {
+      "title": "Feature",
+      "description": "Add a new capability with full file outputs and preserved logging.",
+      "sections": [
+        {
+          "label": "USER_STORY",
+          "prompt": "As a <role> I want <feature> so that <benefit>"
+        },
+        {
+          "label": "ACCEPTANCE_CRITERIA",
+          "prompt": "List, numbered"
+        },
+        {
+          "label": "AFFECTED_AREAS",
+          "prompt": "Files/modules affected"
+        },
+        {
+          "label": "NOTES",
+          "prompt": "Edge cases, performance, i18n, etc."
+        }
+      ],
+      "extra_directives": [
+        "Emit entire files for any changed/added components (R1).",
+        "Keep existing logging/progress/history intact (R2).",
+        "No commentary outside file blocks; if needed, include META.md as a file."
+      ]
+    },
+    "review": {
+      "title": "Code Review",
+      "description": "Request targeted review with explicit outputs.",
+      "sections": [
+        {
+          "label": "OBJECTIVE",
+          "prompt": "What feedback you want"
+        },
+        {
+          "label": "FOCUS",
+          "prompt": "Performance, security, readability, etc."
+        },
+        {
+          "label": "FILES",
+          "prompt": "Which files are in scope"
+        }
+      ],
+      "extra_directives": [
+        "If suggesting changes, provide ENTIRE FILES (R1).",
+        "Never remove logging/progress/history (R2)."
+      ]
+    }
+  },
+  "clipboard": true,
+  "write_default_output_file": true,
+  "help": {
+    "fields": {
+      "Project Name": "Optional label saved in config; appears in prompts.",
+      "Scenario": "Preset that controls which sections appear and their purpose.",
+      "Task": "1-line objective of this prompt. Be specific/measurable.",
+      "Extra Notes": "Any additional constraints, links, or context."
+    },
+    "scenarios": {
+      "troubleshooting": {
+        "overview": "Use when providing errors, expected/observed behavior, and repro steps.",
+        "sections": {
+          "CONTEXT": "Runtime, OS, versions, environment, relevant modules.",
+          "ERRORS": "Exact error messages and stack traces.",
+          "OBSERVED_BEHAVIOR": "What happens now, with details.",
+          "EXPECTED_BEHAVIOR": "What should happen instead.",
+          "REPRO_STEPS": "Minimum steps to reproduce deterministically."
+        }
+      },
+      "refactor": {
+        "overview": "Improve structure/clarity; no feature changes; keep logging.",
+        "sections": {
+          "CONTEXT": "What the code does and where it hurts.",
+          "TARGETS": "Files/modules to touch.",
+          "GOALS": "Readability, cohesion, testability, etc.",
+          "CONSTRAINTS": "APIs and behaviors that must remain stable."
+        }
+      }
+    }
+  },
+  "include_output_contract_in_prompts": true,
+  "r5": {
+    "enforce": true,
+    "header_search_lines": 15,
+    "footer_search_lines": 10,
+    "require_footer_line_count": true,
+    "header_keys": {
+      "path": "path\\s*:\\s*.{1,}",
+      "purpose_or_usage": "(purpose|usage)\\s*:\\s*.{1,}",
+      "timestamp": "\\b\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\b"
+    },
+    "footer_line_count": "(lines|line-count)\\s*:\\s*\\d+"
+  }
+}

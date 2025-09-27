@@ -247,6 +247,32 @@ Choose your preferred method:
 
 Happy testing! 🎨
 
+# CLI prod test in this project
+
+The "CLI prod test" refers to running the Cubist Art CLI in production-like conditions to verify that all main geometry modes (delaunay, voronoi, rectangles) and seed/cascade options generate correct outputs, including SVG and PNG files.
+
+**Typical prod test command:**
+```powershell
+python scripts/prod_sweep.py --input input/your_input_image.jpg --outdir output --quiet --open
+```
+
+This script:
+- Runs the CLI for all main geometries (delaunay, voronoi, rectangles)
+- Runs both cascade and poisson seed modes
+- Writes SVGs to the output directory
+- Optionally opens a gallery of results
+
+**What it checks:**
+- All six canonical outputs (cascade + poisson for each geometry) are generated
+- SVGs are non-empty and visually correct
+- Output files are named consistently (e.g., prod_delaunay_cascade.svg)
+- No errors or warnings except INFO
+- Determinism: repeated runs with the same seed produce identical SVGs
+
+**See also:**
+- `scripts/prod_sweep.py` for the automated prod sweep
+- `docs/RELEASE_READINESS_CHECKLIST.md` for release criteria
+- `scripts/make_gallery.py` for gallery viewing
 
 
 # === CUBIST FOOTER STAMP BEGIN ===

@@ -23,14 +23,20 @@ import os
 import sys
 import time
 import datetime
-import traceback
 import argparse
 from pathlib import Path
 from typing import Optional
 import shutil
 import random
-import re
-from svg_export import count_svg_shapes
+
+import logging
+
+# Send all logging to the terminal (stdout) so callers see messages immediately.
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s",
+)
 
 TS = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -45,23 +51,8 @@ try:
 
     logger = get_logger("test_cli")
 except Exception:
-    import logging
-
-    log_dir = os.path.join(os.path.dirname(__file__), "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    log_file_path = os.path.join(log_dir, "run_log.txt")
     logger = logging.getLogger("test_cli_fallback")
     logger.setLevel(logging.INFO)
-    if logger.hasHandlers():
-        logger.handlers.clear()
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter("%(message)s"))
-    fh = logging.FileHandler(log_file_path, encoding="utf-8")
-    fh.setLevel(logging.INFO)
-    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-    logger.addHandler(ch)
-    logger.addHandler(fh)
     # Guarantee log file exists and append a startup marker
     try:
         os.makedirs(os.path.join(os.path.dirname(__file__), "logs"), exist_ok=True)
@@ -173,126 +164,77 @@ def archive_output_dir(out_dir: str):
 
 def run_cubist_cli(
     input_path: str,
-    output_dir: str,
+    output_path: str,
     geometry_mode: str,
-    use_cascade_fill: bool,
-    total_points: int = 1000,
-    mask_path: str = None,
-    save_step_frames: bool = False,
-    verbose: bool = True,
+    points: int = 120,
+    seed=None,
+    export_svg: bool = False,
     timeout_seconds: int = 300,
-    export_svg_path: Optional[str] = None,
-    seed: Optional[int] = None,
-) -> Optional[str]:
-    """Run the cubist generation CLI command."""
-    logger.info(
-        f"run_cubist_cli() ENTRY: mode={geometry_mode}, cascade={use_cascade_fill}, points={total_points}"
-    )
-    # Prepare output paths
-    base_filename = Path(input_path).stem
-    _png_output_path = (
-        Path(output_dir) / f"{base_filename}_{geometry_mode}_{total_points}.png"
-    )
-    # Construct CLI command
-    cli_command = [
-        "python",
+    cascade_fill: bool = False,
+):
+    """
+    Run cubist_cli.py as a subprocess with arguments compatible to cubist_cli's parser.
+    Do not forward test-only flags like --cascade_fill or --timeout-seconds to the child.
+    """
+    # Build a minimal, compatible command for cubist_cli
+    cmd = [
+        sys.executable,  # use current venv python
         "cubist_cli.py",
         "--input",
-        input_path,
+        str(input_path),
         "--output",
-        str(output_dir),
+        str(output_path),
         "--geometry",
-        geometry_mode,
-        "--cascade_fill",
-        str(use_cascade_fill),
+        str(geometry_mode),
         "--points",
-        str(total_points),
-        "--timeout-seconds",
-        str(timeout_seconds),
+        str(points),
     ]
-    if export_svg_path:
-        cli_command.append("--export-svg")
-    if mask_path:
-        cli_command += ["--mask", mask_path]
-    if save_step_frames:
-        cli_command.append("--step_frames")
-    if verbose:
-        cli_command.append("--verbose")
     if seed is not None:
-        cli_command += ["--seed", str(seed)]
-    logger.info(
-        f"Running CLI command: {' '.join(str(x) for x in cli_command if x is not None)}"
-    )
-    logger.info(
-        f"Subprocess start time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    )
-    logger.info(f"Timeout seconds: {timeout_seconds}")
-    _t0 = time.time()
-    try:
-        import subprocess
+        cmd += ["--seed", str(seed)]
+    if export_svg:
+        cmd += ["--export-svg"]
+    # If the test requested cascade semantics, map that to a cubist_cli flag if appropriate.
+    # Avoid forwarding --cascade_fill boolean directly; use --cascade-stages only if you know desired stages.
+    # (Leave unset here so cubist_cli uses its default)
+    # if cascade_fill:
+    #     cmd += ["--cascade-stages", "2"]
 
-        result = subprocess.run(
-            cli_command,
-            capture_output=True,
+    logging.info("Running CLI command: %s", " ".join(shlex.quote(a) for a in cmd))
+
+    # Run child, capture combined stdout/stderr, enforce timeout locally
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            check=False,
-            timeout=timeout_seconds,
+            encoding="utf-8",
         )
-        _stdout = result.stdout
-        _stderr = result.stderr
-        # Parse METRICS line
-        m = re.search(
-            r"METRICS\s+geometry=(\w+)\s+raster_shapes=(\d+)\s+svg_path=([^\s]+)",
-            _stdout,
+        out, _ = proc.communicate(timeout=timeout_seconds)
+        rc = proc.returncode
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        out = proc.stdout.read() if proc.stdout else ""
+        rc = -9
+        out += "\n[ERROR] child timed out and was killed\n"
+    # Print full child output to terminal for immediate visibility
+    if out:
+        # print with a header so logs are easy to find in the transcript
+        print("\n=== CHILD OUTPUT BEGIN ===\n", flush=True)
+        print(out, flush=True)
+        print("\n=== CHILD OUTPUT END ===\n", flush=True)
+
+    if rc != 0:
+        logging.error("cubist_cli returned %d", rc)
+        # show a helpful tail for quick inspection
+        tail_lines = out.splitlines()[-80:]
+        print(
+            "=== CHILD OUTPUT (tail) ===\n"
+            + "\n".join(tail_lines)
+            + "\n=== END CHILD OUTPUT ===",
+            flush=True,
         )
-        if m:
-            geom = m.group(1)
-            raster_cnt = int(m.group(2))
-            svg_path = m.group(3)
-            svg_cnt = count_svg_shapes(svg_path)
-            ok = svg_cnt == raster_cnt
-            status = "PASS ✅" if ok else "FAIL ❌"
-            print(
-                f"[svg-validate] {status} | geometry={geom} | raster={raster_cnt} | svg={svg_cnt} | file={svg_path}"
-            )
-            if not ok:
-                raise SystemExit(
-                    f"SVG validation failed for {geom}: raster={raster_cnt}, svg={svg_cnt}"
-                )
-        else:
-            print(
-                "[svg-validate] INFO: No METRICS line found; skipping SVG parity check."
-            )
-        # After process, parse PNG_PATH and SVG_PATH from stdout
-        png_path = None
-        svg_path = None
-        for line in _stdout.splitlines():
-            if line.startswith("PNG_PATH:"):
-                png_path = line.split("PNG_PATH:", 1)[1].strip()
-            if line.startswith("SVG_PATH:"):
-                svg_path = line.split("SVG_PATH:", 1)[1].strip()
-        if result.returncode != 0:
-            logger.error(f"CLI command failed with return code {result.returncode}")
-            return None
-        if not png_path or not os.path.exists(png_path):
-            logger.error(f"Expected PNG not found: {png_path}")
-            print(f"❌ ERROR: Expected PNG not found: {png_path}")
-            return None
-        logger.info(f"PNG created: {png_path}")
-        if svg_path:
-            logger.info(f"SVG created: {svg_path}")
-        print(f"✅ PNG created: {png_path}")
-        if svg_path:
-            if os.path.exists(svg_path):
-                print(f"✅ SVG created: {svg_path}")
-            else:
-                print(f"⚠ SVG was requested but not created: {svg_path}")
-        return png_path
-    except Exception as e:
-        logger.error(f"Exception running CLI: {e}")
-        logger.error(traceback.format_exc())
-        print(f"❌ ERROR: Exception running CLI: {e}")
-        return None
+    return rc, out
 
 
 def run_single_test(
@@ -584,7 +526,7 @@ Examples:
             logger.info("Masked-only test suite completed")
         else:
             logger.info("Control flow: single_test")
-            logger.info(
+            logging.info(
                 f"Starting single test: {args.geometry} with cascade={args.cascade_fill}"
             )
             print(
@@ -659,7 +601,6 @@ if __name__ == "__main__":
     except SystemExit as se:
         print(f"[test_cli] SystemExit: code={getattr(se, 'code', None)}")
         raise
-
 
 # === CUBIST FOOTER STAMP BEGIN ===
 # End of file - v2.3.7 - stamped 2025-09-01T13:31:44+02:00

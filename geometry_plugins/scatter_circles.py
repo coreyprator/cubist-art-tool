@@ -1,5 +1,5 @@
 # geometry_plugins/scatter_circles.py
-# Scatter circles with grid‑jitter blue‑noise, sized to resemble the source
+# Scatter circles with grid–jitter blue–noise, sized to resemble the source
 #
 # API: compatible with cubist_cli plugin loader
 #   - generate(canvas_size: (W,H), total_points:int=1000, seed:int=0, **params)
@@ -9,8 +9,8 @@
 # -----
 # • We purposely avoid importing relatively ("from ._trace …") because the
 #   loader may import this module without a package context. We fall back to
-#   lightweight no‑ops if tracing helpers are unavailable.
-# • Radius is computed to roughly match the visual scale of Poisson‑disk output
+#   lightweight no–ops if tracing helpers are unavailable.
+# • Radius is computed to roughly match the visual scale of Poisson–disk output
 #   for the same point budget: r ≈ 0.55 * sqrt((W*H)/N). This makes the scatter
 #   result look more like the input when fills are sampled downstream.
 
@@ -21,12 +21,12 @@ import random
 from typing import Callable, Iterable, List, Sequence, Tuple
 
 # ---- trace helpers (robust to different import styles) -----------------------
-try:  # try package‑relative first
+try:  # try package–relative first
     from ._trace import TRACE, t, dump, try_stats  # type: ignore
 except Exception:
     try:
         from geometry_plugins._trace import TRACE, t, dump, try_stats  # type: ignore
-    except Exception:  # final fallback: no‑ops
+    except Exception:  # final fallback: no–ops
         TRACE = False  # type: ignore
 
         def t(msg: str) -> None:  # type: ignore
@@ -114,6 +114,7 @@ def scatter_circles(
     radius: float | str | None = "auto",
     jitter: float = 0.25,
     margin: float | str = "auto",
+    input_image=None,
     **kwargs,
 ) -> List[dict]:  # Changed return type annotation
     """Return a list of circles as (x, y, r).
@@ -133,7 +134,7 @@ def scatter_circles(
         if r <= 0:
             r = _auto_radius(W, H, total_points)
 
-    # Edge margin so circles stay on‑canvas
+    # Edge margin so circles stay on–canvas
     if margin == "auto":
         m = r
     else:
@@ -190,7 +191,7 @@ def scatter_circles(
             "cx": float(x),
             "cy": float(y),
             "r": float(radius),
-            "fill": "black",
+            "fill": _sample_image_color(input_image, x, y, W, H),
             "stroke": "none",
         }
         circle_data.append(circle_dict)
@@ -205,17 +206,59 @@ def generate(
     canvas_size: Sequence[int],
     total_points: int = 1000,
     seed: int = 0,
+    input_image=None,
     **kwargs,
 ) -> List[dict]:  # Changed return type annotation
     # Call scatter_circles which now returns dict format
-    return scatter_circles(canvas_size, total_points=total_points, seed=seed, **kwargs)
+    return scatter_circles(canvas_size, total_points=total_points, seed=seed, input_image=input_image, **kwargs)
 
 
-# Registry support (used when not in plugin‑exec mode)
+# Registry support (used when not in plugin–exec mode)
 
 
 def register(register_geometry: Callable[[str, Callable[..., Iterable]], None]) -> None:
     register_geometry("scatter_circles", scatter_circles)
+
+
+def _sample_image_color(input_image, x: float, y: float, canvas_width: int, canvas_height: int) -> Tuple[int, int, int]:
+    """Sample color from input image at given coordinates, with fallback to gray if no image."""
+    if input_image is None:
+        # Fallback to a neutral gray if no image provided
+        return (128, 128, 128)
+    
+    try:
+        # Get image dimensions
+        img_width, img_height = input_image.size
+        
+        # Map canvas coordinates to image coordinates
+        img_x = int((x / canvas_width) * img_width)
+        img_y = int((y / canvas_height) * img_height)
+        
+        # Clamp coordinates to image bounds
+        img_x = max(0, min(img_width - 1, img_x))
+        img_y = max(0, min(img_height - 1, img_y))
+        
+        # Sample pixel color
+        pixel = input_image.getpixel((img_x, img_y))
+        
+        # Handle different image modes
+        if isinstance(pixel, tuple):
+            if len(pixel) >= 3:
+                # RGB or RGBA
+                return (int(pixel[0]), int(pixel[1]), int(pixel[2]))
+            elif len(pixel) == 1:
+                # Grayscale
+                return (int(pixel[0]), int(pixel[0]), int(pixel[0]))
+        else:
+            # Single value (grayscale)
+            return (int(pixel), int(pixel), int(pixel))
+            
+    except Exception:
+        # Fallback to gray if sampling fails
+        return (128, 128, 128)
+    
+    # Default fallback
+    return (128, 128, 128)
 
 
 GEOMETRY_MODES = {

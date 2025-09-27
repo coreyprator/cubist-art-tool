@@ -1,0 +1,18 @@
+{
+  "input_image": "G:\\My Drive\\Code\\Python\\cubist_art\\input\\x_your_input_image.jpg",
+  "points": 4000,
+  "seed": 42,
+  "cascade": 3,
+  "export_svg": true,
+  "auto_open_gallery": true,
+  "geoms": [
+    "delaunay",
+    "voronoi",
+    "rectangles",
+    "poisson_disk",
+    "scatter_circles"
+  ],
+  "auto_open": true,
+  "verbose": true,
+  "verbose_probe": true
+}

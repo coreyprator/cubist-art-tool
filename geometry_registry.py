@@ -124,6 +124,15 @@ def load_plugins(directory: str | Path) -> None:
     print(f"[plugins] load complete: dir={dir_path} names={summary}", flush=True)
 
 
+# Find the BUILT_IN_GEOMETRIES dictionary and remove concentric_circles
+BUILT_IN_GEOMETRIES = {
+    "delaunay": generate_delaunay,
+    "voronoi": generate_voronoi,
+    "rectangles": generate_rectangles,
+    # "concentric_circles" removed
+}
+
+
 # Public helper for tests and tooling
 def list_geometries():
     """Return an iterable of registered geometry names."""

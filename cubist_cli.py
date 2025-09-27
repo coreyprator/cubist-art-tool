@@ -9,6 +9,14 @@ import hashlib
 import inspect
 from pathlib import Path
 from time import time
+import logging
+
+# Ensure logging goes to terminal (stdout) so smoke runner captures it directly
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s",
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -63,6 +71,9 @@ def main():
     ap.add_argument("--enable-plugin-exec", action="store_true")
     ap.add_argument("--pipeline")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument(
+        "--verbose", action="store_true"
+    )  # <-- ADDED: allow verbose flag to be passed through
     args = ap.parse_args()
 
     root = Path(__file__).resolve().parent
@@ -115,15 +126,22 @@ def main():
         print(json.dumps(info, ensure_ascii=False))
         return
 
-    # Get canvas size for plugins that need it
+    # Get canvas size and load input image
     canvas_size = None
+    input_image = None
     try:
         from PIL import Image
 
         with Image.open(str(inp)) as img:
             canvas_size = img.size
+            # Convert to RGB if needed and keep a copy for geometry plugins
+            if img.mode != 'RGB':
+                input_image = img.convert('RGB')
+            else:
+                input_image = img.copy()
     except Exception:
         canvas_size = (1200, 800)
+        input_image = None
 
     # Generate shapes using multiple candidate methods
     doc_or_shapes = None
@@ -158,6 +176,9 @@ def main():
                         kwargs["cascade_stages"] = args.cascade_stages
                     if "canvas_size" in sig.parameters:
                         kwargs["canvas_size"] = canvas_size
+                    # FIXED: Pass input_image to geometry plugins
+                    if "input_image" in sig.parameters:
+                        kwargs["input_image"] = input_image
 
                     # Call with appropriate parameters
                     if cand == "render":
@@ -290,11 +311,17 @@ def run_pipeline(
     expected_svg = out_base.with_suffix(".svg")
 
     _canvas_size = None
+    _input_image = None
     try:
         from PIL import Image
 
         with Image.open(str(inp)) as _im:
             _canvas_size = _im.size
+            # Convert to RGB if needed and keep a copy for geometry plugins
+            if _im.mode != 'RGB':
+                _input_image = _im.convert('RGB')
+            else:
+                _input_image = _im.copy()
     except Exception:
         pass
     if _canvas_size is None:
@@ -396,6 +423,7 @@ def run_pipeline(
                     image=str(inp),
                     path=str(inp),
                     canvas_size=_canvas_size,
+                    input_image=_input_image,  # FIXED: Pass input_image
                 )
                 break
             elif isinstance(cand, str) and hasattr(geom_mod, cand):
@@ -406,6 +434,7 @@ def run_pipeline(
                     seed=int(seed),
                     cascade_stages=int(cascade_stages),
                     canvas_size=_canvas_size,
+                    input_image=_input_image,  # FIXED: Pass input_image
                 )
                 break
     except Exception:
@@ -497,5 +526,21 @@ def run_pipeline(
     return info
 
 
+def _write_svg_safe(path, svg_text):
+    try:
+        logging.info("Writing SVG -> %s", path)
+        print(f"Writing SVG -> {path}", flush=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(svg_text)
+    except Exception:
+        traceback.print_exc()
+        raise
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Unexpected error: {e}", file=sys.stderr, flush=True)
+        sys.exit(1)

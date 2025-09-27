@@ -1,0 +1,40 @@
+{
+  "files": [
+    {
+      "path": "v2/scripts/scenario_app_selfcheck.ps1",
+      "language": "powershell",
+      "op": "write",
+      "contents": "[CmdletBinding()]\nparam([string]$ProjectRoot)\nSet-StrictMode -Version Latest\n$ErrorActionPreference='Stop'\nif ($PSBoundParameters.ContainsKey('ProjectRoot') -and $ProjectRoot){ Set-Location -LiteralPath $ProjectRoot }\nWrite-Host 'Self-check: PASS'\n"
+    },
+    {
+      "path": "v2/scripts/scenario_env_bootstrap.ps1",
+      "language": "powershell",
+      "op": "write",
+      "contents": "[CmdletBinding()]\nparam([string]$ProjectRoot)\nSet-StrictMode -Version Latest\n$ErrorActionPreference='Stop'\nif ($PSBoundParameters.ContainsKey('ProjectRoot') -and $ProjectRoot){ Set-Location -LiteralPath $ProjectRoot }\n\n# Load PF config if present\n$cfgPath = Join-Path (Get-Location) '.pf/project.json'\n$cfg = $null\nif (Test-Path -LiteralPath $cfgPath) { try { $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json } catch {} }\n$ver  = $cfg?.pf?.python?.version; if (-not $ver) { $ver = '3.12' }\n$repo = Split-Path -Leaf (Get-Location)\n$venv = $cfg?.pf?.python?.venv_path; if (-not $venv) { $venv = \"C:/venvs/${repo}-${ver}\" }\n\n# Ensure parent dir exists\n$venvParent = Split-Path -Parent $venv\nif ($venvParent -and -not (Test-Path -LiteralPath $venvParent)) { New-Item -ItemType Directory -Path $venvParent | Out-Null }\n\n# Create venv with py launcher if available\n$py = (Get-Command py -ErrorAction SilentlyContinue)?.Source\nif ($py) { & $py (\"-\" + $ver) -m venv $venv } else { & (Get-Command python).Source -m venv $venv }\n\n$pex = Join-Path $venv 'Scripts/python.exe'\nif (-not (Test-Path -LiteralPath $pex)) { throw \"venv python not found: $pex\" }\n& $pex -m pip install -U pip\nif (Test-Path -LiteralPath './requirements.txt') { & $pex -m pip install -r ./requirements.txt }\n\n# Persist for tools\n$meta = @{ venv_path = $venv; python = (Get-Item $pex).FullName; version = $ver } | ConvertTo-Json\nNew-Item -ItemType Directory -Force -Path './.pf' | Out-Null\n$meta | Set-Content -Encoding utf8NoBOM './.pf/venv.json'\nWrite-Host (\"Env bootstrap: ready -> \" + $venv)\n"
+    },
+    {
+      "path": "v2/scripts/scenario_run_ui_here.ps1",
+      "language": "powershell",
+      "op": "write",
+      "contents": "[CmdletBinding()]\nparam([string]$ProjectRoot)\nSet-StrictMode -Version Latest\n$ErrorActionPreference='Stop'\nif ($PSBoundParameters.ContainsKey('ProjectRoot') -and $ProjectRoot){ Set-Location -LiteralPath $ProjectRoot }\n\nfunction _GetPy { (Get-Command py -ErrorAction SilentlyContinue)?.Source ?? (Get-Command python -ErrorAction SilentlyContinue)?.Source ?? 'python' }\n\n# Prefer manifest if present\n$manifest = './.pf/runui.json'\nif (Test-Path -LiteralPath $manifest) {\n  $m = Get-Content $manifest -Raw | ConvertFrom-Json\n  $wd = if ($m.workdir) { (Resolve-Path $m.workdir).Path } else { (Get-Location).Path }\n  $cmd = $m.command\n  switch ($cmd.type) {\n    'python' { Start-Process -FilePath (_GetPy) -ArgumentList (@($cmd.args) -join ' ') -WorkingDirectory $wd | Out-Null }\n    'exec'   { Start-Process -FilePath $cmd.exec[0] -ArgumentList ((@($cmd.exec) | Select-Object -Skip 1) -join ' ') -WorkingDirectory $wd | Out-Null }\n    default  { throw \"Unsupported runui command.type: $($cmd.type)\" }\n  }\n  Write-Host 'Run UI (manifest): started.'; return\n}\n\n# Auto-detect if no manifest\n$cand = @()\nif (Test-Path -LiteralPath './cubist_gui_main.py') { $cand += [pscustomobject]@{ score=90; kind='python'; args=@('-X','utf8','./cubist_gui_main.py') } }\nelseif (Test-Path -LiteralPath './app.py')       { $cand += [pscustomobject]@{ score=80; kind='python'; args=@('-X','utf8','./app.py') } }\nif (Test-Path -LiteralPath './package.json') { try { $pkg = Get-Content ./package.json -Raw | ConvertFrom-Json; if ($pkg.scripts.start) { $cand += [pscustomobject]@{ score=70; kind='exec'; exec=@('npm','run','start') } elseif ($pkg.scripts.dev) { $cand += [pscustomobject]@{ score=65; kind='exec'; exec=@('npm','run','dev') } } } catch {} }\n$csproj = Get-ChildItem -Filter *.csproj -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1\nif ($csproj) { $cand += [pscustomobject]@{ score=60; kind='exec'; exec=@('dotnet','run','--project', $csproj.FullName) } }\nif (-not $cand) { throw 'No entry point found. Create .pf/runui.json or add an app.py/cubist_gui_main.py.' }\n$choice = $cand | Sort-Object score -Descending | Select-Object -First 1\nswitch ($choice.kind) {\n  'python' { Start-Process -FilePath (_GetPy) -ArgumentList ($choice.args -join ' ') -WorkingDirectory (Get-Location).Path | Out-Null }\n  'exec'   { Start-Process -FilePath $choice.exec[0] -ArgumentList (($choice.exec | Select-Object -Skip 1) -join ' ') -WorkingDirectory (Get-Location).Path | Out-Null }\n}\nWrite-Host 'Run UI (auto-detect): started.'\n"
+    },
+    {
+      "path": "v2/scripts/scenario_setup_run_ui.ps1",
+      "language": "powershell",
+      "op": "write",
+      "contents": "[CmdletBinding()]\nparam([string]$ProjectRoot)\nSet-StrictMode -Version Latest\n$ErrorActionPreference='Stop'\nif ($PSBoundParameters.ContainsKey('ProjectRoot') -and $ProjectRoot){ Set-Location -LiteralPath $ProjectRoot }\n\nNew-Item -ItemType Directory -Force -Path './.pf' | Out-Null\n$cfg = $null; if (Test-Path -LiteralPath './.pf/project.json') { try { $cfg = Get-Content ./.pf/project.json -Raw | ConvertFrom-Json } catch {} }\n$cmd = $cfg?.pf?.runui\nif ($null -eq $cmd) { $cmd = @{ type = 'python'; args = @('-X','utf8', './cubist_gui_main.py') } }\n$manifest = @{ precheck = @('app_selfcheck'); workdir = '.'; env = @{}; command = $cmd } | ConvertTo-Json -Depth 6\n$manifest | Set-Content -Encoding utf8NoBOM './.pf/runui.json'\nWrite-Host 'Wrote ./.pf/runui.json'\n"
+    },
+    {
+      "path": "v2/scripts/scenario_standard_git_publish.ps1",
+      "language": "powershell",
+      "op": "write",
+      "contents": "[CmdletBinding()]\nparam([string]$ProjectRoot,[string]$Message)\nSet-StrictMode -Version Latest\n$ErrorActionPreference='Stop'\nif ($PSBoundParameters.ContainsKey('ProjectRoot') -and $ProjectRoot){ Set-Location -LiteralPath $ProjectRoot }\n\n$git = (Get-Command git -ErrorAction SilentlyContinue)?.Source; if (-not $git) { throw 'git is not on PATH.' }\nif (-not (Test-Path -LiteralPath '.git')) { & $git init | Out-Null }\n& $git add -A\n$pending = & $git status --porcelain\nif ($pending) {\n  if (-not $Message) { $Message = 'PF publish ' + (Get-Date -Format s) }\n  & $git commit -m $Message\n  try { & $git push --set-upstream origin (git rev-parse --abbrev-ref HEAD) 2>$null | Out-Null } catch { Write-Host 'Push skipped or failed (no remote?)' }\n  $ok = $true\n  $sha = (& $git rev-parse --short HEAD).Trim()\n} else { $ok = $true; $sha = (& $git rev-parse --short HEAD 2>$null) }\n\n# Journal\nNew-Item -ItemType Directory -Force -Path './.pf/journal' | Out-Null\n$jn = './.pf/journal/publish_' + (Get-Date -Format 'yyyyMMdd_HHmmss') + '.json'\n(@{ ok=$ok; project=(Get-Location).Path; commit=$sha; message=$Message } | ConvertTo-Json) | Set-Content -Encoding utf8NoBOM $jn\nWrite-Host ('Wrote journal: ' + $jn)\nWrite-Host '[standard_git_publish] OK'\n"
+    },
+    {
+      "path": ".pf/runui.sample.json",
+      "language": "json",
+      "op": "write",
+      "contents": "{\n  \"precheck\": [\"app_selfcheck\"],\n  \"workdir\": \".\",\n  \"env\": {},\n  \"command\": { \"type\": \"python\", \"args\": [\"-X\", \"utf8\", \"./cubist_gui_main.py\"] }\n}\n"
+    }
+  ]
+}

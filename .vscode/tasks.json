@@ -1,133 +1,43 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Setup Environment",
-            "type": "shell",
-            "command": "${workspaceFolder}\\setup_env.bat",
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Activate Environment",
-            "type": "shell",
-            "command": "${workspaceFolder}\\.venv\\Scripts\\activate.bat",
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Install Requirements",
-            "type": "shell",
-            "command": "python",
-            "args": ["-m", "pip", "install", "-r", "requirements.txt"],
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Run Tests",
-            "type": "shell",
-            "command": "python",
-            "args": ["-m", "pytest", "tests/", "-v"],
-            "group": "test",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Run Cubist Core Test",
-            "type": "shell",
-            "command": "python",
-            "args": ["${workspaceFolder}\\test_cascade_fill.py"],
-            "group": "test",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Test All Geometries (CLI)",
-            "type": "shell",
-            "command": "python",
-            "args": ["test_cli.py", "--run_all_tests", "--input", "input/your_input_image.jpg"],
-            "group": "test",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Quick Test Runner",
-            "type": "shell",
-            "command": "${workspaceFolder}\\quick_test.bat",
-            "group": "test",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Update Requirements",
-            "type": "shell",
-            "command": "${workspaceFolder}\\export_requirements.bat",
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Export Requirements (Manual)",
-            "type": "shell",
-            "command": "python",
-            "args": ["-m", "pip", "freeze"],
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared"
-            },
-            "options": {
-                "shell": {
-                    "executable": "cmd.exe",
-                    "args": ["/c", "${workspaceFolder}\\.venv\\Scripts\\activate.bat && python -m pip freeze > requirements.txt && echo Requirements exported to requirements.txt"]
-                }
-            },
-            "problemMatcher": []
-        }
-    ]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "PF: Env Bootstrap",
+      "type": "shell",
+      "command": "pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./v2/scripts/scenario_env_bootstrap.ps1 -ProjectRoot .",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run UI (PF)",
+      "type": "shell",
+      "command": "pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./v2/scripts/scenario_run_ui_here.ps1 -ProjectRoot .",
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: Pytest",
+      "type": "process",
+      "command": "C:/venvs/cubist_art-3.12/Scripts/python.exe",
+      "args": ["-m", "pytest", "-q"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Lint: Ruff",
+      "type": "process",
+      "command": "C:/venvs/cubist_art-3.12/Scripts/python.exe",
+      "args": ["-m", "ruff", "check", "."],
+      "problemMatcher": []
+    },
+    {
+      "label": "Preflight",
+      "type": "shell",
+      "command": "pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./tools/preflight.ps1",
+      "problemMatcher": []
+    },
+    {
+      "label": "Publish (PF standard)",
+      "type": "shell",
+      "command": "pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./v2/scripts/scenario_standard_git_publish.ps1 -ProjectRoot .",
+      "problemMatcher": []
+    }
+  ]
 }

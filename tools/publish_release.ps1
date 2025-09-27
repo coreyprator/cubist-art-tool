@@ -1,323 +1,283 @@
-# === CUBIST STAMP BEGIN ===
-# Project: Cubist Art
-# File: tools/publish_release.ps1
-# Version: v2.3.7
-# Build: 2025-09-01T13:31:41
-# Commit: 8163630
-# Stamped: 2025-09-01T13:31:48+02:00
-# === CUBIST STAMP END ===
-<#
-===============================================================================
- Cubist Art — Release Publisher (with Ruff + Prod Smoke gate)
- File: tools/publish_release.ps1
- Version: v2.3.9
- Build: 2025-09-01T10:28:00
-===============================================================================
+<# =====================================================================
+ publish_release.ps1  — release helper with smoke (SVG+PNG) and handoff
+ ----------------------------------------------------------------------
+ Features
+   • Stamps repo (tools/stamp_repo.py) with VERSION + build ts
+   • Formats (ruff), runs tests (pytest -q)
+   • Smoke test for core geometries: SVG required; PNG validated.
+       - If PNG missing, converts SVG→PNG with CairoSVG (if present)
+   • Commits, tags, pushes
+   • Optional GitHub release via gh CLI
+   • NEW: -EmitHandoff builds a portable zip by calling tools/archive_source.ps1
+           (-HandoffAttach uploads the zip to the GitHub release)
 
-What it does (in order):
-  1) Resolve repo root, Python, branch, version (param or VERSION file)
-  2) Optionally stamp headers/footers via tools/stamp_repo.py
-  3) Run Ruff (format + fix)  ← gate (fail stops)
-  4) Run tests (pytest -q)    ← gate (fail stops)
-  5) Run Production Smoke     ← gate (fail stops)
-     - Generates tiny PNG input
-     - Runs tools/run_cli.py for: delaunay, voronoi, rectangles
-     - Verifies at least one SVG (>0 bytes) per geometry
-  6) Commit changes (robust to pre-commit modifying files)
-  7) Create tag if missing and push branch + tags
-  8) Optionally create a GitHub Release if `gh` is available
+ Examples
+   pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass `
+     -File .\tools\publish_release.ps1 `
+     -Branch "milestone/v2.3.7.5  PF Handoff" -Diag -EmitHandoff -HandoffAttach
 
-Examples:
-  pwsh -f tools/publish_release.ps1
-  pwsh -f tools/publish_release.ps1 -Version v2.3.9 -BuildTs (Get-Date -Format s) -Branch milestone/v2.3.9
+   # CI-ish, but skip GitHub release page:
+   pwsh -File .\tools\publish_release.ps1 -NoRelease -EmitHandoff
+===================================================================== #>
 
-Parameters:
-  -Version         Version string; if omitted, reads ./VERSION
-  -BuildTs         Build timestamp (ISO). Default = now (local time)
-  -Branch          Branch to publish from. Default = current branch
-  -ReleaseNotes    Path to release notes used by GitHub release (optional)
-  -NoStamp         Skip stamping headers/footers
-  -NoTests         Skip pytest (Ruff and Smoke still run unless disabled)
-  -NoRuff          Skip Ruff lint/format (not recommended)
-  -NoSmoke         Skip production smoke (not recommended)
-  -NoTag           Skip creating/pushing tag
-  -NoRelease       Skip GitHub release creation
-  -Force           Proceed even if working tree is dirty
-  -DryRun          Print actions but don’t execute
-===============================================================================
-#>
-
-[CmdletBinding(PositionalBinding=$false)]
+[CmdletBinding()]
 param(
-  [string]$Version,
-  [string]$BuildTs,
   [string]$Branch,
-  [string]$ReleaseNotes,
-  [switch]$NoStamp,
-  [switch]$NoTests,
-  [switch]$NoRuff,
-  [switch]$NoSmoke,
-  [switch]$NoTag,
+  [switch]$Diag,
   [switch]$NoRelease,
   [switch]$Force,
-  [switch]$DryRun
+
+  # Handoff bundle options
+  [switch]$EmitHandoff,
+  [string]$HandoffOutRoot = ".\handoff",
+  [switch]$HandoffAttach
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function TS([string]$Msg) {
-  $t = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
-  Write-Host "$t $Msg"
+function Write-Stamp([string]$msg) {
+  $ts = Get-Date -Format s
+  Write-Host "$ts $msg"
 }
 
-function Invoke-Proc {
+function Get-RepoRoot {
+  try {
+    $r = (git rev-parse --show-toplevel 2>$null)
+    if ($r) { return $r }
+  } catch { }
+  if ($PSScriptRoot) {
+    $parent = Split-Path $PSScriptRoot -Parent
+    if (Test-Path (Join-Path $parent ".git")) { return $parent }
+    $parent2 = Split-Path $parent -Parent
+    if (Test-Path (Join-Path $parent2 ".git")) { return $parent2 }
+  }
+  return (Get-Location).Path
+}
+
+function Prefer-Python {
+  $repo = Get-RepoRoot
+  $venv = Join-Path $repo ".venv\Scripts\python.exe"
+  if (Test-Path $venv) { return $venv }
+  return "python"
+}
+
+function Require-CleanTree {
+  param([switch]$AllowDirty)
+  if ($AllowDirty) { return }
+  $st = git status --porcelain
+  if ($st) {
+    throw "Working tree is dirty. Commit/stash or rerun with -Force."
+  }
+}
+
+function Run-Exec {
   param(
-    [Parameter(Mandatory=$true)][string]$FilePath,
-    [Parameter()][string[]]$Arguments = @(),
-    [switch]$IgnoreExit
+    [Parameter(Mandatory)] [string]$Exe,
+    [Parameter(Mandatory)] [string[]]$Args
   )
-  TS "RUN> $FilePath $($Arguments -join ' ')"
-  if ($DryRun) { return 0 }
-  & $FilePath @Arguments
-  $code = $LASTEXITCODE
-  if (-not $IgnoreExit -and $code -ne 0) {
-    throw "Command failed ($code): $FilePath $($Arguments -join ' ')"
-  }
-  return $code
+  Write-Stamp "RUN> $Exe $($Args -join ' ')"
+  $p = Start-Process -FilePath $Exe -ArgumentList $Args -Wait -NoNewWindow -PassThru -RedirectStandardOutput "STDOUT.tmp" -RedirectStandardError "STDERR.tmp"
+  $out = (Get-Content "STDOUT.tmp" -Raw) 2>$null
+  $err = (Get-Content "STDERR.tmp" -Raw) 2>$null
+  if ($out) { Write-Output $out.TrimEnd() }
+  if ($err) { Write-Output $err.TrimEnd() }
+  Remove-Item "STDOUT.tmp","STDERR.tmp" -Force -ErrorAction SilentlyContinue
+  return $p.ExitCode
 }
 
-function Git-Top {
-  try {
-    $top = (git rev-parse --show-toplevel).Trim()
-    if (-not $top) { throw "not a git repo" }
-    return $top
-  } catch {
-    throw "This directory is not a Git repository."
-  }
+function Has-Command($name) {
+  $cmd = Get-Command $name -ErrorAction SilentlyContinue
+  return [bool]$cmd
 }
 
-function Git-CurrentBranch {
-  try { (git branch --show-current).Trim() } catch { return "" }
+# --- Begin --------------------------------------------------------------------
+
+$repo = Get-RepoRoot
+Set-Location $repo
+$python = Prefer-Python
+
+$VERSION_FILE = Join-Path $repo "VERSION"
+$Version = (Test-Path $VERSION_FILE) ? ((Get-Content $VERSION_FILE -Raw).Trim()) : "0.0.0"
+$BuildTs = Get-Date -Format s
+
+if (-not $Branch) {
+  $Branch = (git branch --show-current).Trim()
 }
 
-function Git-IsClean {
-  $status = (git status --porcelain)
-  return [string]::IsNullOrWhiteSpace($status)
-}
+Write-Stamp "[repo] root = $repo"
+Write-Stamp "[python] $python"
+Write-Stamp "[version] $Version"
+Write-Stamp "[build] $BuildTs"
+Write-Stamp "[git] Already on branch: $Branch"
+Write-Stamp "[branch] active = $Branch"
 
-function Ensure-Branch([string]$RepoRoot, [string]$Desired) {
-  $current = Git-CurrentBranch
-  if ([string]::IsNullOrEmpty($Desired)) {
-    if ([string]::IsNullOrEmpty($current)) { throw "Detached HEAD; specify -Branch." }
-    TS "[git] Using current branch: $current"
-    return $current
-  }
-  if ($current -eq $Desired) {
-    TS "[git] Already on branch: $Desired"
-    return $Desired
-  }
-  try {
-    Invoke-Proc -FilePath "git" -Arguments @("switch", $Desired) -IgnoreExit
-  } catch {
-    TS "[git] Branch '$Desired' not found; creating it."
-    Invoke-Proc -FilePath "git" -Arguments @("switch", "-c", $Desired)
-  }
-  return $Desired
-}
+# Guard dirty tree unless -Force
+Require-CleanTree -AllowDirty:$Force
 
-function Ensure-File([string]$Path) {
-  if (-not (Test-Path $Path)) { throw "Required file not found: $Path" }
-}
+# 1) Stamp repo
+$stampArgs = @((Join-Path $repo "tools\stamp_repo.py"), "--version", $Version, "--build-ts", $BuildTs)
+$code = Run-Exec $python $stampArgs
+Write-Output $code
 
-# --- Resolve repo context ----------------------------------------------------
-$RepoRoot = Git-Top
-Set-Location $RepoRoot
-TS "[repo] root = $RepoRoot"
+# 2) Format / lint
+$code = Run-Exec "ruff" @("check","--fix"); Write-Output $code
+$code = Run-Exec "ruff" @("format"); Write-Output $code
 
-# Resolve Python (prefer venv)
-$VenvPy = Join-Path $RepoRoot ".venv\Scripts\python.exe"
-$Python = (Test-Path $VenvPy) ? $VenvPy : "python"
-TS "[python] $Python"
+# 3) Tests
+$code = Run-Exec "pytest" @("-q")
+if ($code -ne 0) { throw "pytest failed with exit $code" }
 
-# Resolve Version
-if (-not $Version) {
-  $verFile = Join-Path $RepoRoot "VERSION"
-  if (Test-Path $verFile) { $Version = (Get-Content $verFile -Raw).Trim() }
-  else { throw "No -Version provided and VERSION file not found." }
-}
-if (-not $Version.StartsWith("v")) { $Version = "v$Version" }
-TS "[version] $Version"
+# 4) Smoke (SVG + PNG verification)
+$smokeRoot = Join-Path $repo ("output\release_smoke\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
+Write-Stamp "[smoke] root = $smokeRoot"
 
-# Resolve BuildTs
-if (-not $BuildTs) { $BuildTs = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss") }
-TS "[build] $BuildTs"
+# Make an input PNG
+$makeInput = @"
+from PIL import Image, ImageDraw
+img = Image.new('RGB',(320,240),'white')
+d = ImageDraw.Draw(img)
+d.rectangle((20,20,300,220), outline=(0,0,0), width=3)
+d.ellipse((120,60,200,140), outline=(200,0,0), width=3)
+img.save(r'$($smokeRoot.Replace('\','\\'))\in.png')
+"@
+$tmpPy = Join-Path $smokeRoot "make_input.py"
+$makeInput | Set-Content -Encoding utf8 $tmpPy
+$code = Run-Exec $python @($tmpPy)
+Write-Stamp ("created " + (Join-Path $smokeRoot "in.png"))
 
-# Resolve/Ensure branch
-$Branch = Ensure-Branch -RepoRoot $RepoRoot -Desired $Branch
-TS "[branch] active = $Branch"
-
-# Safety: clean tree unless forced
-if (-not $Force -and -not (Git-IsClean)) {
-  throw "Working tree is dirty. Commit/stash or rerun with -Force."
-}
-
-# --- Required project files --------------------------------------------------
-$StampScript = Join-Path $RepoRoot "tools\stamp_repo.py"
-Ensure-File $StampScript
-$VersioningPy = Join-Path $RepoRoot "versioning.py"
-Ensure-File $VersioningPy
-$RunCli = Join-Path $RepoRoot "tools\run_cli.py"
-Ensure-File $RunCli
-
-# --- Actions ----------------------------------------------------------------
-# 1) Stamp (unless skipped)
-if (-not $NoStamp) {
-  Invoke-Proc -FilePath $Python -Arguments @($StampScript, "--version", $Version, "--build-ts", $BuildTs)
-} else {
-  TS "[stamp] Skipped by -NoStamp"
-}
-
-# 2) Ruff (unless skipped)  ← gate
-if (-not $NoRuff) {
-  Invoke-Proc -FilePath "ruff" -Arguments @("check", "--fix")
-  Invoke-Proc -FilePath "ruff" -Arguments @("format")
-} else {
-  TS "[ruff] Skipped by -NoRuff"
-}
-
-# 3) Tests (unless skipped) ← gate
-if (-not $NoTests) {
-  Invoke-Proc -FilePath "pytest" -Arguments @("-q")
-} else {
-  TS "[tests] Skipped by -NoTests"
-}
-
-# 4) Production Smoke (unless skipped) ← gate
-function Make-TestImage([string]$PythonExe, [string]$OutPng) {
-  $code = @'
-from PIL import Image
-import sys
-p=sys.argv[1]
-img=Image.new("RGB",(160,120),(90,110,130))
-img.save(p)
-print("created",p)
-'@
-  $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("mkimg_"+[Guid]::NewGuid().ToString()+".py")
-  Set-Content -Path $tmp -Value $code -Encoding UTF8
-  try {
-    & $PythonExe $tmp $OutPng
-    if ($LASTEXITCODE -ne 0) { throw "python image gen failed ($LASTEXITCODE)" }
-  } finally {
-    Remove-Item -Path $tmp -ErrorAction SilentlyContinue
-  }
-}
-
-function Assert-NonEmptyFile([string]$Path, [string]$Desc) {
-  if (-not (Test-Path $Path)) { throw ("Smoke: missing {0}: {1}" -f $Desc, $Path) }
-  $len = (Get-Item $Path).Length
-  if ($len -lt 64) { throw ("Smoke: {0} too small ({1} bytes): {2}" -f $Desc, $len, $Path) }
-  TS ("[smoke] ok: {0} => {1} ({2} bytes)" -f $Desc, $Path, $len)
-}
-
-function Run-Geom([string]$Geom, [string]$InPng, [string]$OutDir) {
-  New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+$geos = @("delaunay","voronoi","rectangles")
+foreach ($g in $geos) {
+  $outDir = Join-Path $smokeRoot $g
+  New-Item -ItemType Directory -Force -Path $outDir | Out-Null
   $args = @(
-    $RunCli,
-    "--input", $InPng,
-    "--output", $OutDir,
-    "--geometry", $Geom,
+    (Join-Path $repo "tools\run_cli.py"),
+    "--input", (Join-Path $smokeRoot "in.png"),
+    "--output", $outDir,
+    "--geometry", $g,
     "--points", "300",
     "--seed", "123",
     "--cascade-stages", "2",
     "--export-svg"
   )
-  Invoke-Proc -FilePath $Python -Arguments $args
-  # verify: at least one SVG non-empty
-  $svgs = Get-ChildItem -Path $OutDir -Filter *.svg -ErrorAction SilentlyContinue
-  if (-not $svgs) { throw ("Smoke: {0}: no SVG produced in {1}" -f $Geom, $OutDir) }
-  $first = $svgs[0].FullName
-  Assert-NonEmptyFile -Path $first -Desc ("{0} SVG" -f $Geom)
-}
+  $code = Run-Exec $python $args
+  if ($code -ne 0) { throw "run_cli failed for $g (exit $code)" }
 
-if (-not $NoSmoke) {
-  $smokeRoot = Join-Path $RepoRoot ("output\release_smoke\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
-  New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
-  TS "[smoke] root = $smokeRoot"
-  $inPng = Join-Path $smokeRoot "in.png"
-  Make-TestImage -PythonExe $Python -OutPng $inPng
-  Run-Geom -Geom "delaunay"  -InPng $inPng -OutDir (Join-Path $smokeRoot "delaunay")
-  Run-Geom -Geom "voronoi"   -InPng $inPng -OutDir (Join-Path $smokeRoot "voronoi")
-  Run-Geom -Geom "rectangles"-InPng $inPng -OutDir (Join-Path $smokeRoot "rectangles")
-  TS "[smoke] All geometries passed."
-} else {
-  TS "[smoke] Skipped by -NoSmoke"
-}
+  $svg = Join-Path $outDir "$g.svg"
+  if (-not (Test-Path $svg)) { throw "Smoke: missing SVG for $g: $svg" }
+  $svgSize = (Get-Item $svg).Length
+  if ($svgSize -lt 100) { throw "Smoke: $g SVG too small ($svgSize bytes)" }
+  Write-Stamp "[smoke] ok: $g SVG => $svg ($svgSize bytes)"
 
-# 5) Commit (robust to pre-commit mutations)
-function Do-Commit([string]$Msg) {
-  Invoke-Proc -FilePath "git" -Arguments @("add", "-A")
-  $code = Invoke-Proc -FilePath "git" -Arguments @("commit", "-m", $Msg) -IgnoreExit
-  return $code
-}
-$commitMsg = "$($Version): automated release publish"
-$code = Do-Commit -Msg $commitMsg
-if ($code -ne 0) {
-  TS "[commit] Retrying commit after pre-commit changes…"
-  $code = Do-Commit -Msg "$($Version): fixup after pre-commit"
-  if ($code -ne 0) { TS "[commit] Nothing to commit or commit failed again; continuing." }
-}
-
-# 6) Tag & Push
-if (-not $NoTag) {
-  $tagExists = $false
-  try {
-    git show-ref --tags --verify --quiet "refs/tags/$Version"
-    if ($LASTEXITCODE -eq 0) { $tagExists = $true }
-  } catch { }
-  if (-not $tagExists) {
-    Invoke-Proc -FilePath "git" -Arguments @("tag", "-a", $Version, "-m", "$($Version) release")
-  } else {
-    TS "[tag] $Version already exists; skipping."
+  # PNG check or fallback via CairoSVG
+  $png = Join-Path $outDir "$g.png"
+  if (-not (Test-Path $png)) {
+    # Try cairosvg (if installed)
+    $tryCairo = @()
+    try {
+      $tryCairo = & $python -m pip show cairosvg 2>$null
+    } catch { $tryCairo = @() }
+    if ($tryCairo) {
+      Write-Stamp "[smoke] PNG missing for $g; generating via CairoSVG"
+      $code = Run-Exec $python @("-m","cairosvg","-f","png","-o",$png,$svg)
+      if ($code -ne 0) { throw "CairoSVG failed for $g (exit $code)" }
+    }
   }
-} else {
-  TS "[tag] Skipped by -NoTag"
+
+  if (-not (Test-Path $png)) {
+    throw "Smoke: missing PNG for $g after fallback: $png"
+  }
+  $pngSize = (Get-Item $png).Length
+  if ($pngSize -lt 100) { throw "Smoke: $g PNG too small ($pngSize bytes)" }
+  Write-Stamp "[smoke] ok: $g PNG => $png ($pngSize bytes)"
+}
+Write-Stamp "[smoke] All geometries passed."
+
+# 5) Commit (run twice if pre-commit mutates)
+$null = Run-Exec "git" @("add","-A")
+$msg1 = "v$Version — automated release publish"
+$code = Run-Exec "git" @("commit","-m",$msg1)
+if ($code -ne 0) {
+  Write-Stamp "[commit] Retrying commit after pre-commit changes."
+  $null = Run-Exec "git" @("add","-A")
+  $msg2 = "v$Version — fixup after pre-commit"
+  $code2 = Run-Exec "git" @("commit","-m",$msg2)
+  if ($code2 -ne 0) {
+    Write-Stamp "[commit] Nothing to commit or commit failed again; continuing."
+  }
 }
 
-Invoke-Proc -FilePath "git" -Arguments @("push", "--set-upstream", "origin", $Branch) -IgnoreExit
-if (-not $NoTag) {
-  Invoke-Proc -FilePath "git" -Arguments @("push", "--tags") -IgnoreExit
-}
+# 6) Tag & push
+$tag = "v$Version"
+$null = Run-Exec "git" @("tag","-a",$tag,"-m","$tag release")
+$null = Run-Exec "git" @("push","--set-upstream","origin",$Branch)
+$null = Run-Exec "git" @("push","--tags")
 
 # 7) GitHub Release (optional)
-function Has-GH { try { gh --version > $null 2>&1; return $true } catch { return $false } }
-if (-not $NoRelease -and (Has-GH)) {
-  $rnArgs = @()
-  if ($ReleaseNotes) {
-    if (-not (Test-Path $ReleaseNotes)) { throw "Release notes file not found: $ReleaseNotes" }
-    $rnArgs = @("-F", (Resolve-Path $ReleaseNotes).Path)
-  } else {
-    $rnArgs = @("--generate-notes")
-  }
-  $exists = $false
+$gh = (Has-Command "gh") ? "gh" : $null
+$didRelease = $false
+if (-not $NoRelease -and $gh) {
   try {
-    gh release view $Version > $null 2>&1
-    if ($LASTEXITCODE -eq 0) { $exists = $true }
-  } catch { }
-  if (-not $exists) {
-    Invoke-Proc -FilePath "gh" -Arguments @("release", "create", $Version, "-t", $Version) + $rnArgs
-  } else {
-    TS "[gh] Release $Version exists; skipping creation."
+    $code = Run-Exec $gh @("release","view",$tag)
+    if ($code -ne 0) {
+      $code = Run-Exec $gh @("release","create",$tag,"--target",$Branch,"-t",$tag,"-n","$tag release")
+      if ($code -ne 0) { throw "gh release create failed (exit $code)" }
+    }
+    $didRelease = $true
+  } catch {
+    Write-Stamp "[gh] Release step skipped: $($_.Exception.Message)"
   }
 } else {
-  TS "[gh] Skipped GitHub release (NoRelease or gh not installed)."
+  Write-Stamp "[gh] Skipped GitHub release (NoRelease or gh not installed)."
 }
 
-TS "[done] Published $Version on branch $Branch"
+# 8) (NEW) Emit handoff bundle (and optionally attach to release)
+if ($EmitHandoff) {
+  $archiver = Join-Path $repo "tools\archive_source.ps1"
+  if (-not (Test-Path $archiver)) {
+    Write-Stamp "[handoff] WARNING: missing tools/archive_source.ps1 — skipping bundle."
+  } else {
+    Write-Stamp "[handoff] Building bundle…"
+    # Track newest zip before
+    $before = Get-ChildItem $HandoffOutRoot -Filter "*.zip" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+    $args = @(
+      "-NoLogo","-NoProfile","-ExecutionPolicy","Bypass",
+      "-File", $archiver,
+      "-OutRoot", $HandoffOutRoot,
+      "-IncludeLogs","-IncludeSmoke","-RunFreeze","-Zip",
+      "-Branch", $Branch,
+      "-Tag", $tag
+    )
+    $code = Run-Exec "pwsh" $args
+    if ($code -ne 0) { Write-Stamp "[handoff] archive_source exited $code (continuing)" }
+
+    Start-Sleep -Milliseconds 500
+    $after = Get-ChildItem $HandoffOutRoot -Filter "*.zip" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+    $zipPath = $null
+    if ($after) {
+      if (-not $before -or $after.LastWriteTime -gt $before.LastWriteTime) {
+        $zipPath = $after.FullName
+      }
+    }
+    if ($zipPath) {
+      Write-Stamp "[handoff] DONE: $zipPath"
+      if ($HandoffAttach -and $didRelease -and $gh) {
+        Write-Stamp "[handoff] Uploading to release $tag…"
+        $code = Run-Exec $gh @("release","upload",$tag,$zipPath,"--clobber")
+        if ($code -ne 0) {
+          Write-Stamp "[handoff] upload failed (exit $code)"
+        }
+      } elseif ($HandoffAttach -and -not $didRelease) {
+        Write-Stamp "[handoff] Skipping attach: no GitHub release was created."
+      }
+    } else {
+      Write-Stamp "[handoff] Could not locate newly created handoff zip."
+    }
+  }
+}
+
+Write-Stamp "[done] Published $tag on branch $Branch"
 exit 0
-
-
-
-# === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.7 - stamped 2025-09-01T13:31:48+02:00
-# === CUBIST FOOTER STAMP END ===

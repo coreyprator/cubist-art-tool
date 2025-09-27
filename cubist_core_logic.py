@@ -183,6 +183,65 @@ def _run_plugin(args, outfile: str, quiet: bool = False) -> int:
     return 0
 
 
+def _sample_colors_from_image(shapes, image_path, verbose: bool = False, **kwargs):
+    """Sample colors from the input image at each shape's center/coordinates.
+    Ensure we set 'fill' (and 'color') so svg_export will pick up sampled colors.
+    Verbose: print sampling diagnostics when enabled.
+    """
+    from PIL import Image
+
+    try:
+        with Image.open(image_path) as img:
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            width, height = img.size
+            if verbose:
+                print(
+                    f"[debug] sampling colors from {image_path} size={width}x{height} shapes={len(shapes)}"
+                )
+            sampled = 0
+            for i, shape in enumerate(shapes):
+                x = y = None
+                if shape.get("type") == "circle":
+                    x, y = shape.get("cx", None), shape.get("cy", None)
+                elif shape.get("type") in ("rect", "rectangle"):
+                    if all(k in shape for k in ("x", "y", "w", "h")):
+                        x = shape["x"] + shape["w"] / 2.0
+                        y = shape["y"] + shape["h"] / 2.0
+                elif "points" in shape and shape["points"]:
+                    pts = shape["points"]
+                    x = sum(p[0] for p in pts) / len(pts)
+                    y = sum(p[1] for p in pts) / len(pts)
+                if x is None or y is None:
+                    x = shape.get("cx", shape.get("x", None))
+                    y = shape.get("cy", shape.get("y", None))
+                if x is None or y is None:
+                    if verbose:
+                        print(f"[debug] skipping shape[{i}] no sample coord")
+                    continue
+                sx = max(0, min(int(round(x)), width - 1))
+                sy = max(0, min(int(round(y)), height - 1))
+                try:
+                    r, g, b = img.getpixel((sx, sy))
+                except Exception as e:
+                    if verbose:
+                        print(
+                            f"[debug] sample failed for shape[{i}] at ({sx},{sy}): {e}"
+                        )
+                    r, g, b = (128, 128, 128)
+                color = f"rgb({r},{g},{b})"
+                shape["fill"] = color
+                shape["color"] = color
+                sampled += 1
+                if verbose and (i < 5 or i % 100 == 0):
+                    print(f"[debug] shape[{i}] sample at ({sx},{sy}) -> {color}")
+            if verbose:
+                print(f"[debug] sampled colors for {sampled}/{len(shapes)} shapes")
+    except Exception as e:
+        print(f"Warning: Color sampling failed: {e}")
+    return shapes
+
+
 def main(argv: List[str] | None = None) -> int:
     args = parse_args(argv)
     quiet = args.quiet and not args.no_quiet
@@ -214,6 +273,10 @@ def main(argv: List[str] | None = None) -> int:
             _ensure_parent(out_p)
             return _run_plugin(args, str(out_p), quiet=quiet)
         raise
+
+    # Apply color sampling from input image when available
+    if args.input:
+        shapes = _sample_colors_from_image(shapes, args.input, verbose=args.verbose)
 
     shapes = _maybe_limit(shapes, int(args.svg_limit))
     out_p = _ensure_parent(out_p)

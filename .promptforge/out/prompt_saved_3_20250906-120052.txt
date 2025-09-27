@@ -1,0 +1,74 @@
+RULES (read carefully; apply before anything else)
+R1. Return ENTIRE FILES only, never diffs or snippets.
+R2. Preserve all logging / progress / history features unchanged.
+R3. No prose outside file blocks. One file per block.
+
+OUTPUT CONTRACT
+- Use file blocks delimited by: ```file ... ```
+- Fields required in each block: path, language, contents
+- One file per block. Emit ENTIRE FILES only.
+
+EXAMPLE
+```file
+path: src/module.py
+language: python
+contents:
+<full file contents here>
+```
+
+SENTINELS
+- Start marker: ### FILE OUTPUT START relative file name, line count  ###
+- End marker: ### END OF OUTPUT ###
+- Self-check line (must appear before first file block): ✔ R1 ✔ R2 ✔ R3
+
+SCENARIO: Troubleshooting
+DESCRIPTION: Provide debugging guidance and code changes while obeying rule R1 (full files) and R2 (logging preserved).
+
+TASK
+refresh the history tab  after a Save to DB.
+
+CONTEXT
+G:\My Drive\Code\Python\cubist_art\tools\promptforge.py
+
+ERRORS
+When you send code files, you add at the top information that isn't code:
+path: tools/promptforge.py
+language: python
+contents:
+It needs to be commented or outside the code copy/paste box.
+
+PromptForge app needs to refresh the history tab  after a Save to DB.
+
+Add a preview and retreive button to pull an item into the prompt form.
+
+OBSERVED_BEHAVIOR
+Cause code bugs
+
+EXPECTED_BEHAVIOR
+Comment out that information in the code text box.
+all code needs to be smoke tested
+
+REPRO_STEPS
+To reproduce the problem for: app needs to refresh the history page after a Save to DB.
+1. Create content in Prompt tab.
+2. Click Save to DB
+3. Click History
+4. You should see the new DB item.
+
+EXTRA DIRECTIVES
+- When proposing code changes, emit ENTIRE FILES per OUTPUT CONTRACT.
+- If multiple files are needed, emit one file block per file.
+- If you must explain, create a separate META.md as a full file block.
+
+RESPONSE REQUIREMENTS
+1) First line must be the self-check line exactly as below.
+2) Then emit the start sentinel.
+3) Then only file blocks per OUTPUT CONTRACT.
+4) Finish with the end sentinel.
+
+SELF-CHECK LINE
+✔ R1 ✔ R2 ✔ R3
+
+BEGIN RESPONSE WITH:
+✔ R1 ✔ R2 ✔ R3
+### FILE OUTPUT START relative file name, line count  ###

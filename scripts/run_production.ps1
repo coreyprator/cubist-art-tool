@@ -1,302 +1,175 @@
-# === CUBIST STAMP BEGIN ===
-# Project: Cubist Art
-# File: scripts/run_production.ps1
-# Version: v2.3.7
-# Build: 2025-09-01T13:31:41
-# Commit: 8163630
-# Stamped: 2025-09-01T13:31:47+02:00
-# === CUBIST STAMP END ===
-<#  run_production.ps1
-    Batch runner for cubist_cli.py across geometries/stages/seeds.
-
-    PowerShell 5.1 compatible:
-      - no null‑coalescing, safe‑navigation, or ternary operators
-      - uses System.Diagnostics.Process for robust stdout/stderr capture
-
-    Examples:
-      powershell -ExecutionPolicy Bypass -File scripts\run_production.ps1 `
-        -Image "input\your_input_image.jpg" `
-        -Points 200 `
-        -Geometries delaunay,voronoi,rectangles `
-        -CascadeStages 1,3 `
-        -Seeds 123,456 `
-        -SvgLimit 150 `
-        -TimeoutSeconds 120 `
-        -ExportSvg `
-        -VerboseLog
-
-      # Example usage for all geometries in one command:
-      # (from PowerShell prompt, in your repo root)
-powershell -ExecutionPolicy Bypass -File scripts\run_production.ps1 `
-  -Image "input\your_input_image.jpg" `
-  -Points 200 `
-  -Geometries "delaunay,voronoi,rectangles" `
-  -CascadeStages "1,3" `
-  -Seeds "123,456" `
-  -SvgLimit 150 `
-  -TimeoutSeconds 120 `
-  -ExportSvg `
-  -VerboseLog
-      # This will run all geometries (rectangles, delaunay, voronoi) in all scenarios:
-      powershell -ExecutionPolicy Bypass -File scripts\run_production.ps1 `
-        -Image "input\your_input_image.jpg" `
-        -Points 120 `
-        -Geometries rectangles,delaunay,voronoi `
-        -SvgLimit 150 `
-        -TimeoutSeconds 180 `
-        -VerboseLog
-#>
-
-[CmdletBinding()]
 param(
-  [string]$Image = "input\your_input_image.jpg",
-  [int]$Points = 100,
-  [string]$Geometries = "delaunay,voronoi,rectangles",   # <-- now a comma-separated string, not array
-  [string]$CascadeStages = "1,3",                        # <-- now a comma-separated string, not array
-  [string]$Seeds = "123,456",                            # <-- now a comma-separated string, not array
-  [int]$SvgLimit = 0,
-  [int]$TimeoutSeconds = 0,
-  [switch]$StepFrames,
-  [switch]$VerboseLog,
-  [string]$Mask = "",
-  [switch]$NoExportSvg,
-  [switch]$ExportSvg,
-  [switch]$DryRun
+    [Parameter(Mandatory=$true)][string]$Image,
+    [int]$Points = 4000,
+    [string]$Geometries = "delaunay,voronoi,rectangles",
+    [switch]$ExportSvg,
+    [switch]$VerboseLog
 )
 
-# ---------- helpers ----------
-function Split-List([string]$s) {
-  if ([string]::IsNullOrWhiteSpace($s)) { return @() }
-  return ($s -split '\s*,\s*' | Where-Object { $_ -ne "" })
-}
+# Configuration
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$PythonExe = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+$CliPath = Join-Path $RepoRoot "cubist_cli.py"
+$TimeStamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$OutRoot = Join-Path $RepoRoot "output\prod_$TimeStamp"
 
-function Quote-Arg([string]$a) {
-  if ($a -match '[\s"]') {
-    return '"' + ($a -replace '"','\"') + '"'
-  }
-  return $a
-}
+Write-Host "Using Python: $PythonExe"
+Write-Host "Repo root:    $RepoRoot"
+Write-Host "CLI path:     $CliPath"
+Write-Host "OutRoot:      $OutRoot"
 
-function Get-RunName([string]$Geom, [int]$StageCount, [int]$Seed) {
-  if ($StageCount -le 1) {
-    if ($Seed -ne 123) { return ($Geom + "_regular_seed" + $Seed) }
-    return ($Geom + "_regular")
-  } else {
-    if ($Seed -ne 123) { return ($Geom + "_cascade" + $StageCount + "_seed" + $Seed) }
-    return ($Geom + "_cascade" + $StageCount)
-  }
-}
+# Ensure output directory exists
+New-Item -ItemType Directory -Path $OutRoot -Force | Out-Null
 
-# ---------- resolve paths & python ----------
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$cliPath  = Join-Path $repoRoot "cubist_cli.py"
+# Parse geometries
+$GeomList = $Geometries -split ","
 
-if (-not (Test-Path -LiteralPath $cliPath)) {
-  throw "Cannot find cubist_cli.py at: $cliPath"
-}
-
-# Prefer venv python if present unless user provided one
-if ([string]::IsNullOrWhiteSpace($PythonPath)) {
-  $venvPy = Join-Path $repoRoot ".venv\Scripts\python.exe"
-  if (Test-Path -LiteralPath $venvPy) { $PythonPath = $venvPy }
-  else { $PythonPath = "python" }
-}
-$Python = $PythonPath
-
-# Input image absolute path
-try {
-  $imgAbs = (Resolve-Path -LiteralPath $Image -ErrorAction Stop).Path
-} catch {
-  throw "Input image not found: $Image"
-}
-
-if ($VerboseLog) {
-  Write-Host "Using Python: $Python"
-  Write-Host "Repo root:    $repoRoot"
-  Write-Host "CLI path:     $cliPath"
-}
-
-# ---------- expand sets ----------
-$geomList  = $Geometries -split '\s*,\s*'
-$stageList = $CascadeStages -split '\s*,\s*' | ForEach-Object { [int]$_ }
-$seedList  = $Seeds -split '\s*,\s*' | ForEach-Object { [int]$_ }
-
-if (-not $geomList -or $geomList.Count -eq 0) { throw "No geometries provided." }
-if (-not $stageList -or $stageList.Count -eq 0) { throw "No cascade stages provided." }
-if (-not $seedList  -or $seedList.Count  -eq 0) { throw "No seeds provided." }
-
-# ---------- output root ----------
-$stamp   = Get-Date -Format "yyyyMMdd_HHmmss"
-$outRoot = Join-Path $repoRoot ("output\prod_{0}" -f $stamp)
-New-Item -ItemType Directory -Force -Path $outRoot | Out-Null
-if ($VerboseLog) {
-  Write-Host "OutRoot:      $outRoot"
-}
-
-# root consolidated errors
-$rootErrLog = Join-Path $outRoot "run_errors.log"
-Remove-Item -LiteralPath $rootErrLog -Force -ErrorAction SilentlyContinue | Out-Null
-
-# ---------- run a single job ----------
-function Invoke-CubistJob {
-  param(
-    [string] $Geom,
-    [int]    $StageCount,
-    [int]    $Seed
-  )
-
-  $runName = Get-RunName -Geom $Geom -StageCount $StageCount -Seed $Seed
-  $outDir  = Join-Path $outRoot $runName
-  New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-
-  $logPath = Join-Path $outDir "run.log"
-  $errPath = Join-Path $outDir "run_error.log"
-  Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue | Out-Null
-  Remove-Item -LiteralPath $errPath -Force -ErrorAction SilentlyContinue | Out-Null
-
-  Write-Host ("Running {0} (geom={1}, points={2}, stages={3}, seed={4})" -f $runName,$Geom,$Points,$StageCount,$Seed)
-
-  # build CLI args
-  $args = @()
-  $args += $cliPath
-  $args += "--input";           $args += $imgAbs
-  $args += "--output";          $args += $outDir
-  $args += "--points";          $args += $Points.ToString()
-  $args += "--geometry";        $args += $Geom
-  $args += "--seed";            $args += $Seed.ToString()
-  $args += "--cascade-stages";  $args += $StageCount.ToString()
-  $args += "--metrics-json";    $args += (Join-Path $outDir "metrics.json")
-  if ($ExportSvg) {
-    $args += "--export-svg"
-    if ($SvgLimit -gt 0) { $args += "--svg-limit"; $args += $SvgLimit.ToString() }
-  }
-  if ($TimeoutSeconds -gt 0) { $args += "--timeout-seconds"; $args += $TimeoutSeconds.ToString() }
-  if ($StepFrames) { $args += "--save-step-frames" }
-  if ($VerboseLog) { $args += "--verbose" }
-
-  # Use System.Diagnostics.Process to avoid NativeCommandError
-  $psi = New-Object System.Diagnostics.ProcessStartInfo
-  $psi.FileName = $Python
-  $psi.UseShellExecute = $false
-  $psi.RedirectStandardOutput = $true
-  $psi.RedirectStandardError  = $true
-  # Proper quoting for arguments:
-  $psi.Arguments = ($args | ForEach-Object { Quote-Arg $_ }) -join ' '
-
-  $proc = New-Object System.Diagnostics.Process
-  $proc.StartInfo = $psi
-
-  $null = $proc.Start()
-  $stdOut = $proc.StandardOutput.ReadToEnd()
-  $stdErr = $proc.StandardError.ReadToEnd()
-  if ($TimeoutSeconds -gt 0) {
-    $finished = $proc.WaitForExit($TimeoutSeconds * 1000)
-    if (-not $finished) { try { $proc.Kill() } catch {} }
-  } else {
-    $proc.WaitForExit()
-  }
-
-  # write logs
-  if ($stdOut) { $stdOut | Out-File -FilePath $logPath -Encoding UTF8 -Force }
-  if ($stdErr) { $stdErr | Out-File -FilePath $errPath -Encoding UTF8 -Force }
-
-  $exit = $proc.ExitCode
-
-  if ($exit -eq 0) {
-    Write-Host ("  OK  (exit=0)")
-    return @{ Ok=$true; Name=$runName; Dir=$outDir; Log=$logPath; Err=$errPath; Exit=$exit }
-  } else {
-    Write-Host ("  FAIL (exit={0})" -f $exit)
-    # Append concise record into root error log
-    Add-Content -Path $rootErrLog -Encoding UTF8 -Value ""
-    Add-Content -Path $rootErrLog -Encoding UTF8 -Value ("---- {0} (geom={1}, points={2}, stages={3}, seed={4}) ----" -f $runName,$Geom,$Points,$StageCount,$Seed)
-    if ($stdErr) {
-      Add-Content -Path $rootErrLog -Encoding UTF8 -Value ("EXCEPTION: " + ($stdErr.Split("`n")[0]))
+# Configuration matrix
+$Configs = @()
+foreach ($Geom in $GeomList) {
+    $Configs += @{
+        Name = "${Geom}_regular"
+        Geometry = $Geom
+        Points = $Points
+        Seed = 123
+        Stages = 1
     }
-    Add-Content -Path $rootErrLog -Encoding UTF8 -Value ""
-    Add-Content -Path $rootErrLog -Encoding UTF8 -Value ("OutDir: {0}" -f $outDir)
-    Add-Content -Path $rootErrLog -Encoding UTF8 -Value ("Log:    {0}" -f $logPath)
-    Add-Content -Path $rootErrLog -Encoding UTF8 -Value ("Exit:   {0}" -f $exit)
-    # small snippet from stdout if present
-    if (Test-Path -LiteralPath $logPath) {
-      $snippet = Get-Content -LiteralPath $logPath -TotalCount 10
-      Add-Content -Path $rootErrLog -Encoding UTF8 -Value "=== LOG SNIPPET START ==="
-      $snippet | ForEach-Object { Add-Content -Path $rootErrLog -Encoding UTF8 -Value $_ }
-      Add-Content -Path $rootErrLog -Encoding UTF8 -Value "=== LOG SNIPPET END ==="
+    $Configs += @{
+        Name = "${Geom}_regular_seed456"
+        Geometry = $Geom
+        Points = $Points
+        Seed = 456
+        Stages = 1
     }
-    return @{ Ok=$false; Name=$runName; Dir=$outDir; Log=$logPath; Err=$errPath; Exit=$exit }
-  }
-}
-
-function Build-Args {
-  param(
-    [string]$Geometry,
-    [int]$Points,
-    [int]$CascadeStages,
-    [int]$Seed,
-    [string]$Image,
-    [string]$OutDir,
-    [string]$MetricsJson
-  )
-
-  $args = @("$Cli",
-            "--input", (Resolve-Path $Image).Path,
-            "--points", "$Points",
-            "--geometry", $Geometry,
-            "--metrics-json", $MetricsJson,
-            "--cascade-stages", "$CascadeStages",
-            "--seed", "$Seed",
-            "--output", (Resolve-Path $OutDir).Path)
-
-  if ($ExportSvg)      { $args += "--export-svg" }
-  if ($NoExportSvg)    { } # do nothing, disables export
-  if ($VerboseLog)     { $args += "--verbose" }
-  if ($Mask)           { $args += @("--mask", (Resolve-Path $Mask).Path) }
-  if ($SvgLimit -gt 0) { $args += @("--svg-limit", "$SvgLimit") }
-  if ($TimeoutSeconds -gt 0) { $args += @("--timeout-seconds", "$TimeoutSeconds") }
-  if ($StepFrames)     { $args += "--save-step-frames" }
-
-  return $args
-}
-
-# ---------- execute grid ----------
-$results = @()
-foreach ($g in $geomList) {
-  foreach ($st in $stageList) {
-    foreach ($seed in $seedList) {
-      $res = Invoke-CubistJob -Geom $g -StageCount $st -Seed $seed
-      $results += ,$res
+    $Configs += @{
+        Name = "${Geom}_cascade3"
+        Geometry = $Geom
+        Points = $Points
+        Seed = 123
+        Stages = 3
     }
-  }
+    $Configs += @{
+        Name = "${Geom}_cascade3_seed456"
+        Geometry = $Geom
+        Points = $Points
+        Seed = 456
+        Stages = 3
+    }
 }
 
-# ---------- summary ----------
+# Results tracking
+$Results = @()
+$ErrorLogPath = Join-Path $OutRoot "run_errors.log"
+
+# Process each configuration
+foreach ($Config in $Configs) {
+    $ConfigName = $Config.Name
+    $OutDir = Join-Path $OutRoot $ConfigName
+    $LogPath = Join-Path $OutDir "run.log"
+    $ErrorPath = Join-Path $OutDir "run_error.log"
+
+    Write-Host "Running $ConfigName (geom=$($Config.Geometry), points=$($Config.Points), stages=$($Config.Stages), seed=$($Config.Seed))"
+
+    # Ensure config output directory exists
+    New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
+
+    # Construct the full command as a single string for proper space handling
+    $OutputPath = Join-Path $OutDir $ConfigName
+
+    $CliCommand = "& `"$PythonExe`" `"$CliPath`" --input `"$Image`" --output `"$OutputPath`" --geometry $($Config.Geometry) --points $($Config.Points) --seed $($Config.Seed) --cascade-stages $($Config.Stages)"
+
+    if ($ExportSvg) {
+        $CliCommand += " --export-svg"
+    }
+
+    if (!$VerboseLog) {
+        $CliCommand += " --quiet"
+    }
+
+    if ($VerboseLog) {
+        Write-Host "  Command: $CliCommand"
+    }
+
+    try {
+        # Use Invoke-Expression to handle the quoted paths properly
+        $Output = Invoke-Expression "$CliCommand 2>`"$ErrorPath`"" | Out-File -FilePath $LogPath -Encoding UTF8
+        $ExitCode = $LASTEXITCODE
+
+        if ($ExitCode -eq 0) {
+            Write-Host "  SUCCESS (exit=$ExitCode)"
+            $Results += @{
+                Name = $ConfigName
+                Status = "SUCCESS"
+                ExitCode = $ExitCode
+                OutputDir = $OutDir
+                LogPath = $LogPath
+            }
+        } else {
+            Write-Host "  FAIL (exit=$ExitCode)"
+            $Results += @{
+                Name = $ConfigName
+                Status = "FAIL"
+                ExitCode = $ExitCode
+                OutputDir = $OutDir
+                LogPath = $LogPath
+                ErrorPath = $ErrorPath
+            }
+
+            # Log the error details
+            $ErrorContent = ""
+            if (Test-Path $ErrorPath) {
+                $ErrorContent = Get-Content $ErrorPath -Raw
+            }
+
+            $ErrorDetails = @"
+---- $ConfigName (geom=$($Config.Geometry), points=$($Config.Points), stages=$($Config.Stages), seed=$($Config.Seed)) ----
+EXCEPTION: $ErrorContent
+OutDir: $OutDir
+Log:    $LogPath
+Exit:   $ExitCode
+
+"@
+            Add-Content -Path $ErrorLogPath -Value $ErrorDetails
+        }
+    } catch {
+        Write-Host "  ERROR: $($_.Exception.Message)"
+        $Results += @{
+            Name = $ConfigName
+            Status = "ERROR"
+            Exception = $_.Exception.Message
+            OutputDir = $OutDir
+        }
+
+        $ErrorDetails = @"
+---- $ConfigName (geom=$($Config.Geometry), points=$($Config.Points), stages=$($Config.Stages), seed=$($Config.Seed)) ----
+EXCEPTION: $($_.Exception.Message)
+OutDir: $OutDir
+
+"@
+        Add-Content -Path $ErrorLogPath -Value $ErrorDetails
+    }
+}
+
+# Summary
 Write-Host ""
 Write-Host "=== PRODUCTION BATCH SUMMARY ==="
-foreach ($r in $results) {
-  if ($r.Ok) {
-    Write-Host ("OK   {0}  ->  {1}" -f $r.Name, $r.Dir)
-  } else {
-    Write-Host ("FAIL {0}  ->  {1}" -f $r.Name, $r.Dir)
-    Write-Host ("     error log: {0}" -f $r.Err)
-  }
+$SuccessCount = ($Results | Where-Object { $_.Status -eq "SUCCESS" }).Count
+$FailCount = ($Results | Where-Object { $_.Status -ne "SUCCESS" }).Count
+
+foreach ($Result in $Results) {
+    if ($Result.Status -eq "SUCCESS") {
+        Write-Host "$($Result.Status) $($Result.Name)  ->  $($Result.OutputDir)" -ForegroundColor Green
+    } else {
+        Write-Host "$($Result.Status) $($Result.Name)  ->  $($Result.OutputDir)" -ForegroundColor Red
+        if ($Result.ErrorPath) {
+            Write-Host "     error log: $($Result.ErrorPath)" -ForegroundColor Red
+        }
+    }
 }
 
 Write-Host ""
-Write-Host ("All outputs live in: {0}" -f $outRoot)
-if (Test-Path -LiteralPath $rootErrLog) {
-  $len = (Get-Item -LiteralPath $rootErrLog).Length
-  if ($len -gt 0) {
-    Write-Host ("Consolidated errors:  {0}" -f $rootErrLog)
-  } else {
-    Write-Host "Consolidated errors:  (no failures)"
-  }
-} else {
-  Write-Host "Consolidated errors:  (file not created)"
+Write-Host "All outputs live in: $OutRoot"
+if ($FailCount -gt 0) {
+    Write-Host "Consolidated errors:  $ErrorLogPath" -ForegroundColor Red
 }
-
-
-
-# === CUBIST FOOTER STAMP BEGIN ===
-# End of file - v2.3.7 - stamped 2025-09-01T13:31:47+02:00
-# === CUBIST FOOTER STAMP END ===
+Write-Host "Success: $SuccessCount, Failed: $FailCount"
