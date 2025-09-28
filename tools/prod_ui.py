@@ -1,4 +1,4 @@
-# tools/prod_ui.py - COMPLETE FIXED VERSION with UI improvements
+# tools/prod_ui.py - Side-by-Side Fill Methods + Fixed SVG Thumbnails
 from __future__ import annotations
 
 import json
@@ -15,13 +15,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from flask import Flask, jsonify, render_template_string, request, send_file
+from flask import Flask, jsonify, render_template_string, request, send_file, Response
 
 # Add missing imports
 try:
     from PIL import Image
-
-    # ImageCms is optional; use if present for profile->sRGB conversion
     try:
         from PIL import ImageCms
     except Exception:
@@ -31,18 +29,24 @@ except Exception:
     ImageCms = None
 
 # ---------------- Paths & constants ----------------
-ROOT = Path(__file__).resolve().parents[1]  # .../cubist_art
+ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "tools"
 OUT_ROOT = ROOT / "output" / "production"
 PREFS_PATH = TOOLS / ".prod_ui_prefs.json"
 
-# FIXED: Removed concentric_circles as requested
+# Geometry list
 GEOMS = [
-    "delaunay",
-    "voronoi",
     "rectangles",
+    "delaunay", 
+    "voronoi",
     "poisson_disk",
     "scatter_circles",
+]
+
+# Fill methods
+FILL_METHODS = [
+    {"id": "default", "name": "Default Fill", "description": "Base shapes only"},
+    {"id": "cascade", "name": "Cascade Fill", "description": "Base shapes + gap filling"},
 ]
 
 # ---------------- App state ----------------
@@ -93,7 +97,7 @@ def _load_prefs() -> Dict[str, Any]:
     default_input = None
     for candidate in [
         "x_your_input_image.jpg",
-        "your_input_image.jpg",
+        "your_input_image.jpg", 
         "test_image.jpg",
         "sample.jpg",
     ]:
@@ -109,12 +113,12 @@ def _load_prefs() -> Dict[str, Any]:
         "input_image": default_input,
         "points": 500,
         "seed": 42,
-        "cascade": 3,
         "export_svg": True,
         "enable_plugin_exec": True,
         "verbose_probe": True,
         "auto_open_gallery": True,
         "geoms": GEOMS[:3],
+        "fill_methods": ["default"],  # Changed to array
     }
 
 
@@ -129,76 +133,57 @@ def _run_single_geometry(
     output_dir: Path,
     points: int,
     seed: int,
+    fill_method: str = "default",
     verbose: bool = False,
 ) -> Tuple[bool, str]:
-    """Run a single geometry with enhanced error reporting"""
+    """Run a single geometry with fill method support"""
 
-    geom_output = output_dir / geom / f"frame_{geom}.svg"
+    # Use different output paths for different fill methods
+    method_suffix = "_cascade" if fill_method == "cascade" else "_default"
+    geom_output = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.svg"
     geom_output.parent.mkdir(parents=True, exist_ok=True)
 
-    # Resolve and log input file diagnostic
+    # Resolve input path
     try:
         in_p = Path(input_image)
         if not in_p.is_absolute():
             in_p = (ROOT / "input" / input_image).resolve()
         else:
             in_p = in_p.resolve()
-        # safety: ensure inside project
-        try:
-            in_p.relative_to(ROOT)
-        except Exception:
-            _log(f"[warn] input path {in_p} not under project root", "warning")
-        # NEW: log image mode & icc profile presence for diagnostics
-        try:
-            if Image is not None and in_p.exists():
-                with Image.open(str(in_p)) as _im:
-                    icc = _im.info.get("icc_profile")
-                    _log(
-                        f"[debug] input image mode={_im.mode}, size={_im.size}, icc_profile={'yes' if icc else 'no'}",
-                        "info",
-                    )
-        except Exception as e:
-            _log(f"[debug] could not inspect input image: {e}", "warning")
-        if in_p.exists():
-            try:
-                _log(
-                    f"[debug] geometry={geom} using input file: {in_p} size={in_p.stat().st_size} bytes",
-                    "success",
-                )
-            except Exception:
-                _log(f"[debug] geometry={geom} using input file: {in_p}", "success")
-        else:
-            _log(f"[warning] geometry={geom} input file not found: {in_p}", "warning")
-    except Exception as e:
-        _log(f"[warning] resolving input path failed: {e}", "warning")
+    except Exception:
+        in_p = Path(input_image)
 
     cmd = [
         "python",
         "cubist_cli.py",
-        "--input",
-        str(input_image),
-        "--output",
-        str(output_dir / geom / f"frame_{geom}"),
-        "--geometry",
-        geom,
-        "--points",
-        str(points),
-        "--seed",
-        str(seed),
+        "--input", str(in_p),
+        "--output", str(output_dir / f"{geom}{method_suffix}" / f"frame_{geom}"),
+        "--geometry", geom,
+        "--points", str(points),
+        "--seed", str(seed),
         "--export-svg",
     ]
+    
+    # Add fill method parameters
+    if fill_method == "cascade":
+        cmd.extend(["--param", "cascade_fill_enabled=true"])
+        cmd.extend(["--param", "cascade_intensity=0.8"])
+    else:
+        cmd.extend(["--param", "cascade_fill_enabled=false"])
+    
     if verbose:
         cmd.append("--verbose")
 
-    _log(f"Running: {geom}")
+    _log(f"Running: {geom} ({fill_method} fill)", "info")
     start_time = time.time()
+    
     try:
         result = subprocess.run(
             cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=300
         )
         elapsed = time.time() - start_time
 
-        # Forward verbose stdout to UI when requested
+        # Forward verbose output
         if result.stdout and verbose:
             for ln in result.stdout.strip().splitlines():
                 _log(ln)
@@ -221,52 +206,32 @@ def _run_single_geometry(
                     if s.startswith("{") and s.endswith("}"):
                         json_line = s
                         break
-                if json_line is None and lines:
-                    json_line = lines[-1]
                 if json_line:
                     data = json.loads(json_line)
                     shapes = data.get("svg_shapes", "unknown")
             except Exception:
                 pass
+            
             _log(
-                f"✓ {geom}: {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)",
+                f"✓ {geom} ({fill_method}): {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)",
                 "success",
             )
-            return True, f"✓ {geom}: {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)"
+            return True, f"✓ {geom} ({fill_method}): {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)"
         else:
-            error_msg = "Unknown error"
-            try:
-                lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
-                json_line = None
-                for l in reversed(lines):
-                    s = l.strip()
-                    if s.startswith("{") and s.endswith("}"):
-                        json_line = s
-                        break
-                if json_line:
-                    data = json.loads(json_line)
-                    error_msg = data.get(
-                        "plugin_exc",
-                        result.stderr.strip() if result.stderr else "Unknown error",
-                    )
-                else:
-                    error_msg = (
-                        result.stderr.strip() if result.stderr else "Unknown error"
-                    )
-            except Exception:
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
             _log(
-                f"✗ {geom}: failed with rc={result.returncode} ({elapsed:.2f}s)",
+                f"✗ {geom} ({fill_method}): failed with rc={result.returncode} ({elapsed:.2f}s)",
                 "error",
             )
             _log(f"  Error: {error_msg}", "error")
-            return False, f"✗ {geom}: failed - {error_msg}"
+            return False, f"✗ {geom} ({fill_method}): failed - {error_msg}"
+            
     except subprocess.TimeoutExpired:
-        _log(f"✗ {geom}: timed out after 5 minutes", "error")
-        return False, f"✗ {geom}: timed out"
+        _log(f"✗ {geom} ({fill_method}): timed out after 5 minutes", "error")
+        return False, f"✗ {geom} ({fill_method}): timed out"
     except Exception as e:
-        _log(f"✗ {geom}: exception - {e}", "error")
-        return False, f"✗ {geom}: {e}"
+        _log(f"✗ {geom} ({fill_method}): exception - {e}", "error")
+        return False, f"✗ {geom} ({fill_method}): {e}"
 
 
 def _run_batch(
@@ -274,10 +239,11 @@ def _run_batch(
     input_image: str,
     points: int,
     seed: int,
+    fill_methods: List[str],
     auto_open: bool,
     verbose: bool = False,
 ) -> None:
-    """Enhanced batch runner with better logging"""
+    """Enhanced batch runner with multiple fill methods"""
     global BUSY
     try:
         BUSY = True
@@ -285,55 +251,48 @@ def _run_batch(
         output_dir = OUT_ROOT / timestamp
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Resolve input image and log
+        # Resolve input image
         try:
             p = Path(input_image)
             if not p.is_absolute():
                 resolved_input = (ROOT / "input" / input_image).resolve()
             else:
                 resolved_input = p.resolve()
-            try:
-                resolved_input.relative_to(ROOT)
-            except Exception:
-                _log(
-                    f"Warning: resolved input {resolved_input} is outside project root",
-                    "warning",
-                )
         except Exception:
             resolved_input = Path(input_image)
 
-        _log(f"Starting batch with {len(geoms)} geometries")
-        _log(f"Running {len(geoms)} geometries into {output_dir}...")
+        _log(f"Starting batch with {len(geoms)} geometries × {len(fill_methods)} fill methods")
+        _log(f"Fill methods: {', '.join(fill_methods)}")
         _log(f"Input image: {resolved_input}")
 
         results = []
         successful = 0
+        total_combinations = len(geoms) * len(fill_methods)
+        
         for geom in geoms:
-            # pass resolved_input explicitly to the geometry runner so plugins get the absolute path
-            success, msg = _run_single_geometry(
-                geom, str(resolved_input), output_dir, points, seed, verbose
-            )
-            results.append((geom, success, msg))
-            if success:
-                successful += 1
+            for fill_method in fill_methods:
+                success, msg = _run_single_geometry(
+                    geom, str(resolved_input), output_dir, points, seed, fill_method, verbose
+                )
+                results.append((geom, success, msg, fill_method))
+                if success:
+                    successful += 1
 
-        # Generate gallery (now include input preview)
-        _generate_gallery(output_dir, results, resolved_input)
+        # Generate comparison gallery
+        _generate_comparison_gallery(output_dir, results, resolved_input, fill_methods)
 
-        total = len(geoms)
-        failed = total - successful
+        failed = total_combinations - successful
         if failed == 0:
-            _log(f"🎉 All {total} geometries completed successfully!", "complete")
+            _log(f"🎉 All {total_combinations} combinations completed successfully!", "complete")
         elif successful > 0:
             _log(
-                f"⚠ Batch complete: {successful}/{total} successful, {failed} failed",
+                f"⚠ Batch complete: {successful}/{total_combinations} successful, {failed} failed",
                 "warning",
             )
         else:
-            _log(f"⚠ Batch failed: 0/{total} successful", "error")
+            _log(f"⚠ Batch failed: 0/{total_combinations} successful", "error")
 
-        _log(f"Wrote gallery -> {output_dir}/index.html")
-        _log(f"Generated gallery with {successful}/{total} successful SVGs")
+        _log(f"Wrote comparison gallery -> {output_dir}/index.html")
 
         if auto_open:
             gallery_path = output_dir / "index.html"
@@ -348,215 +307,16 @@ def _run_batch(
         BUSY = False
 
 
-def _parse_css_color(s: str):
-    """Parse simple CSS color forms: #rgb #rrggbb, rgb(), rgba(), hsl(), common names.
-    Returns (r,g,b) ints 0-255 or None on failure."""
-    try:
-        s = s.strip()
-        # hex
-        if s.startswith("#"):
-            h = s[1:]
-            if len(h) == 3:
-                h = "".join(ch * 2 for ch in h)
-            if len(h) == 6:
-                return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
-            return None
-        # rgb(a)
-        m = re.match(
-            r"rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)", s, flags=re.I
-        )
-        if m:
-            r, g, b = m.groups()
-            return (int(float(r)), int(float(g)), int(float(b)))
-        # hsl()
-        m = re.match(
-            r"hsla?\(\s*([0-9.]+)\s*,\s*([0-9.]+)%\s*,\s*([0-9.]+)%", s, flags=re.I
-        )
-        if m:
-            h, sp, lp = map(float, m.groups())
-            # convert HSL to RGB
-            h = h % 360 / 360.0
-            s = sp / 100.0
-            l = lp / 100.0
-
-            def hue2rgb(p, q, t):
-                if t < 0:
-                    t += 1
-                if t > 1:
-                    t -= 1
-                if t < 1 / 6:
-                    return p + (q - p) * 6 * t
-                if t < 1 / 2:
-                    return q
-                if t < 2 / 3:
-                    return p + (q - p) * (2 / 3 - t) * 6
-                return p
-
-            if s == 0:
-                r = g = b = l
-            else:
-                q = l * (1 + s) if l < 0.5 else l + s - l * s
-                p = 2 * l - q
-                r = hue2rgb(p, q, h + 1 / 3)
-                g = hue2rgb(p, q, h)
-                b = hue2rgb(p, q, h - 1 / 3)
-            return (int(round(r * 255)), int(round(g * 255)), int(round(b * 255)))
-        # some common names
-        n = s.lower()
-        nmap = {
-            "white": (255, 255, 255),
-            "black": (0, 0, 0),
-            "red": (255, 0, 0),
-            "green": (0, 128, 0),
-            "blue": (0, 0, 255),
-        }
-        if n in nmap:
-            return nmap[n]
-    except Exception:
-        pass
-    return None
-
-
-def _rgb_to_hex(rgb):
-    return "#{:02x}{:02x}{:02x}".format(*rgb)
-
-
-# Replace / add color conversion + distance helpers (use CIE Lab for perceptual distance)
-def _srgb_channel_to_linear(c: float) -> float:
-    # c in 0..255
-    c = c / 255.0
-    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-
-
-def _rgb_to_xyz(rgb: Tuple[int, int, int]) -> Tuple[float, float, float]:
-    # convert sRGB (0-255) to XYZ (D65)
-    r_lin = _srgb_channel_to_linear(rgb[0])
-    g_lin = _srgb_channel_to_linear(rgb[1])
-    b_lin = _srgb_channel_to_linear(rgb[2])
-    # sRGB to XYZ (D65)
-    x = r_lin * 0.4124564 + g_lin * 0.3575761 + b_lin * 0.1804375
-    y = r_lin * 0.2126729 + g_lin * 0.7151522 + b_lin * 0.0721750
-    z = r_lin * 0.0193339 + g_lin * 0.1191920 + b_lin * 0.9503041
-    return (x, y, z)
-
-
-def _xyz_to_lab(xyz: Tuple[float, float, float]) -> Tuple[float, float, float]:
-    x, y, z = xyz
-    # D65 reference white
-    xn, yn, zn = 0.95047, 1.00000, 1.08883
-
-    def f(t):
-        return t ** (1 / 3) if t > 0.008856 else (7.787 * t) + (16.0 / 116.0)
-
-    fx = f(x / xn)
-    fy = f(y / yn)
-    fz = f(z / zn)
-    L = 116.0 * fy - 16.0
-    a = 500.0 * (fx - fy)
-    b = 200.0 * (fy - fz)
-    return (L, a, b)
-
-
-def _rgb_to_lab(rgb: Tuple[int, int, int]) -> Tuple[float, float, float]:
-    xyz = _rgb_to_xyz(rgb)
-    return _xyz_to_lab(xyz)
-
-
-def _color_distance(a: Tuple[int, int, int], b: Tuple[int, int, int]) -> float:
-    """Perceptual distance between two RGB colors using Lab Euclidean distance."""
-    try:
-        lab_a = _rgb_to_lab(a)
-        lab_b = _rgb_to_lab(b)
-        # Euclidean distance in Lab (approximate ΔE)
-        d = (
-            (lab_a[0] - lab_b[0]) ** 2
-            + (lab_a[1] - lab_b[1]) ** 2
-            + (lab_a[2] - lab_b[2]) ** 2
-        ) ** 0.5
-        return d
-    except Exception:
-        # fallback to simple RGB distance if anything goes wrong
-        return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
-
-
-def _top_image_colors(image_path: Path, n: int = 8):
-    """Return top n colors from image_path as list of (r,g,b). Handles ICC -> sRGB when possible."""
-    if Image is None:
-        _log("Pillow not installed; skipping input palette extraction", "warning")
-        return []
-    try:
-        with Image.open(str(image_path)) as im:
-            # If an embedded ICC profile exists and ImageCms is available, convert to sRGB for accurate sampling
-            try:
-                icc = im.info.get("icc_profile")
-                if icc and ImageCms is not None:
-                    try:
-                        # create profiles and convert image to sRGB using the embedded profile bytes
-                        srgb_profile = ImageCms.createProfile("sRGB")
-                        src_profile = (
-                            ImageCms.ImageCmsProfile(io.BytesIO(icc))
-                            if isinstance(icc, (bytes, bytearray))
-                            else None
-                        )
-                        if src_profile is not None:
-                            im = ImageCms.profileToProfile(
-                                im, src_profile, srgb_profile, outputMode="RGB"
-                            )
-                            _log(
-                                "Converted input image from embedded ICC profile to sRGB for palette extraction",
-                                "info",
-                            )
-                        else:
-                            _log(
-                                "Embedded ICC profile not in expected bytes form; skipping profile conversion",
-                                "warning",
-                            )
-                    except Exception as e:
-                        _log(
-                            f"ICC->sRGB conversion failed; proceeding without profile conversion ({e})",
-                            "warning",
-                        )
-            except Exception:
-                # ignore profile handling errors
-                pass
-
-            # Convert to RGBA and downscale to speed up
-            im = im.convert("RGBA")
-            im.thumbnail((300, 300))
-
-            # Keep only opaque/visible pixels
-            pixels = [px for px in im.getdata() if px[3] > 0]
-            if not pixels:
-                return []
-
-            # Quantize to reduce colors then getcounts
-            pal = Image.new("RGBA", im.size)
-            pal.putdata(pixels)
-            q = pal.convert("P", palette=Image.ADAPTIVE, colors=n)
-            p = q.convert("RGB")
-            colors = p.getcolors(p.size[0] * p.size[1]) or []
-            colors.sort(reverse=True)
-            top = [c[1] for c in colors[:n]]
-            # ensure unique
-            seen = []
-            out = []
-            for c in top:
-                if c not in seen:
-                    seen.append(c)
-                    out.append(c)
-            return out
-    except Exception as e:
-        _log(f"Failed extracting top image colors: {e}", "warning")
-        return []
-
-
-def _generate_gallery(
-    output_dir: Path, results: List[Tuple[str, bool, str]], input_image: str | Path
+def _generate_comparison_gallery(
+    output_dir: Path, 
+    results: List[Tuple[str, bool, str, str]], 
+    input_image: str | Path,
+    fill_methods: List[str]
 ) -> None:
-    """Generate an HTML gallery with the results (writes per-SVG wrapper pages) and include input preview."""
-    # Copy input image into the output assets folder so gallery shows exact file used
+    """Generate comparison gallery with side-by-side fill methods"""
+    
+    # Copy input image for preview
     preview_rel = None
-    preview_abs = None
     try:
         src = Path(input_image)
         if not src.is_absolute():
@@ -565,280 +325,382 @@ def _generate_gallery(
             assets = output_dir / "assets"
             assets.mkdir(parents=True, exist_ok=True)
             dest = assets / src.name
-            # only copy if different
-            try:
-                if not dest.exists() or src.resolve() != dest.resolve():
-                    shutil.copy2(src, dest)
-                preview_rel = f"assets/{src.name}"
-                preview_abs = dest
-                _log(f"Copied input preview -> {dest}", "success")
-            except Exception as e:
-                _log(f"Failed copying preview: {e}", "warning")
-        else:
-            _log(f"No input preview available (not found): {src}", "warning")
-    except Exception as e:
-        _log(f"Error preparing preview: {e}", "warning")
+            if not dest.exists():
+                shutil.copy2(src, dest)
+            preview_rel = f"assets/{src.name}"
+    except Exception:
+        pass
 
-    # compute top colors of input image (optional if Pillow present)
-    input_palette = _top_image_colors(preview_abs, 8) if preview_abs else []
-
-    # --- NEW: build visual palette HTML and log the palette ----------------
-    input_palette_html = ""
-    if input_palette:
-        # log palette as hex list
-        try:
-            hexes = [_rgb_to_hex(c) for c in input_palette]
-            _log(f"Input palette: {', '.join(hexes)}", "info")
-        except Exception:
-            hexes = []
-        # render swatches with hex labels
-        items = []
-        for c in input_palette:
-            try:
-                hexc = _rgb_to_hex(c)
-            except Exception:
-                hexc = "transparent"
-            items.append(
-                f'<div style="display:inline-block;margin-right:8px;text-align:center;"><span style="display:block;width:34px;height:24px;background:{hexc};border:1px solid #999;margin-bottom:4px;"></span><div style="font-size:11px;color:#444">{hexc}</div></div>'
-            )
-        input_palette_html = f'<div style="margin-bottom:12px"><h4>Input palette</h4><div>{"".join(items)}</div></div>'
-    # -------------------------------------------------------------------------
-
-    gallery_items = []
-    for geom, success, msg in results:
-        svg_path = output_dir / geom / f"frame_{geom}.svg"
-        wrapper_path = output_dir / geom / f"frame_{geom}.html"
-        if success and svg_path.exists():
-            # FIXED: Improved wrapper with better SVG fitting to browser window
-            try:
-                wrapper_html = f"""<!doctype html>
+    # Enhanced wrapper template for proper image fitting
+    def create_wrapper_template(geom_name: str, method: str) -> str:
+        method_suffix = "_cascade" if method == "cascade" else "_default"
+        return f"""<!doctype html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>{geom} - Cubist Art</title>
+    <title>{geom_name} ({method} fill) - Cubist Art</title>
     <style>
         html, body {{
-            height: 100%;
+            height: 100vh;
             margin: 0;
             padding: 0;
             background: #111;
             overflow: hidden;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
         }}
+        .header {{
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 15px;
+            border-radius: 5px;
+            z-index: 100;
+        }}
         .svg-container {{
-            width: 95vw;
-            height: 95vh;
+            width: 100vw;
+            height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
         }}
-        object {{
+        img {{
             max-width: 100%;
             max-height: 100%;
             width: auto;
             height: auto;
             object-fit: contain;
+            border: 1px solid #333;
+            background: white;
         }}
     </style>
 </head>
 <body>
+    <div class="header">{geom_name} ({method} fill)</div>
     <div class="svg-container">
-        <object data="frame_{geom}.svg" type="image/svg+xml"></object>
+        <img src="frame_{geom_name}.svg" alt="{geom_name} {method} fill">
     </div>
 </body>
 </html>"""
-                wrapper_path.parent.mkdir(parents=True, exist_ok=True)
-                wrapper_path.write_text(wrapper_html, encoding="utf-8")
-            except Exception:
-                pass
 
-            rel_wrapper = f"{geom}/frame_{geom}.html"
-            rel_svg = f"{geom}/frame_{geom}.svg"
-            file_size = svg_path.stat().st_size
-            size_str = (
-                f"{file_size / 1024:.1f} KB"
-                if file_size > 1024
-                else f"{file_size} bytes"
-            )
+    # Group results by geometry for side-by-side comparison
+    results_by_geom = {}
+    for geom, success, msg, method in results:
+        if geom not in results_by_geom:
+            results_by_geom[geom] = {}
+        results_by_geom[geom][method] = (success, msg)
 
-            # extract fills and build swatches and mapping to input palette
-            shapes = "unknown"
-            swatch_html = ""
-            mapping_lines = []
-            try:
-                svg_content = svg_path.read_text(encoding="utf-8")
-                shapes = (
-                    svg_content.count("<circle")
-                    + svg_content.count("<polygon")
-                    + svg_content.count("<path")
-                )
-                fills = re.findall(
-                    r'fill=["\']([^"\']+)["\']', svg_content, flags=re.IGNORECASE
-                )
-                fills += re.findall(
-                    r'style=["\'][^"\']*fill:\s*([^;\'"]+)',
-                    svg_content,
-                    flags=re.IGNORECASE,
-                )
-                seen = []
-                for fcol in fills:
-                    col = fcol.strip()
-                    if not col or col.lower() == "none":
-                        continue
-                    if col not in seen:
-                        seen.append(col)
-                if seen:
-                    # swatches
-                    swatch_html = '<div style="margin-top:6px">'
-                    for c in seen[:8]:
-                        rgb = _parse_css_color(c)
-                        hexc = _rgb_to_hex(rgb) if rgb else c
-                        swatch_html += f'<span title="{c}" style="display:inline-block;width:18px;height:18px;background:{hexc};border:1px solid #999;margin-right:6px;vertical-align:middle"></span>'
-                        # find nearest input palette color
-                        if input_palette and rgb:
-                            best = min(
-                                input_palette, key=lambda ip: _color_distance(ip, rgb)
-                            )
-                            dist = _color_distance(best, rgb)
-                            best_hex = _rgb_to_hex(best)
-                            mapping_lines.append(f"{hexc} -> {best_hex} (Δ={dist:.1f})")
-                            _log(
-                                f"{geom} fill {hexc} -> closest input {best_hex} Δ={dist:.1f}",
-                                "info",
-                            )
-                        elif rgb:
-                            _log(f"{geom} fill {hexc} parsed as {rgb}", "info")
-                    swatch_html += "</div>"
-            except Exception as e:
-                _log(f"Color extraction failed for {geom}: {e}", "warning")
+    gallery_items = []
+    
+    for geom in results_by_geom:
+        # Create comparison row for this geometry
+        method_columns = []
+        
+        for method in fill_methods:
+            method_suffix = "_cascade" if method == "cascade" else "_default"
+            svg_path = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.svg"
+            wrapper_path = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.html"
+            
+            if method in results_by_geom[geom]:
+                success, msg = results_by_geom[geom][method]
+                
+                if success and svg_path.exists():
+                    # Create enhanced wrapper with img tag instead of object
+                    wrapper_html = create_wrapper_template(geom, method)
+                    wrapper_path.parent.mkdir(parents=True, exist_ok=True)
+                    wrapper_path.write_text(wrapper_html, encoding="utf-8")
 
-            # include mapping summary under swatches (if any)
-            map_html = ""
-            if mapping_lines:
-                map_html = (
-                    "<div style='font-size:12px;color:#444;margin-top:6px'>"
-                    + "<br/>".join(mapping_lines)
-                    + "</div>"
-                )
+                    rel_wrapper = f"{geom}{method_suffix}/frame_{geom}.html"
+                    rel_svg = f"{geom}{method_suffix}/frame_{geom}.svg"
+                    file_size = svg_path.stat().st_size
+                    size_str = (
+                        f"{file_size / 1024:.1f} KB"
+                        if file_size > 1024
+                        else f"{file_size} bytes"
+                    )
 
-            gallery_items.append(f"""
-			<div class="gallery-item success">
-				<h3>✅ {geom}</h3>
-				<p><strong>{shapes} shapes</strong> • {size_str} • <a href="{rel_wrapper}" target="_blank">open (fit)</a> | <a href="{rel_svg}" target="_blank">raw SVG</a></p>
-				{swatch_html}
-				{map_html}
-				<div class="thumbnail-container" onclick="window.open('{rel_wrapper}', '_blank')" style="cursor:pointer;border:1px solid #ddd;background:white;width:300px;height:200px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;">
-					<object data="{rel_svg}" type="image/svg+xml" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;pointer-events:none;"></object>
-				</div>
-			</div>
-			""")
-        else:
-            gallery_items.append(f"""
-			<div class="gallery-item error">
-				<h3>⚠ {geom}</h3>
-				<p>⚠ No SVG for <strong>{geom}</strong> — {svg_path}</p>
-			</div>
-			""")
+                    # Count shapes in SVG
+                    shapes = "unknown"
+                    try:
+                        svg_content = svg_path.read_text(encoding="utf-8")
+                        shapes = (
+                            svg_content.count("<circle")
+                            + svg_content.count("<polygon")
+                            + svg_content.count("<path")
+                            + svg_content.count("<rect")
+                        )
+                    except Exception:
+                        pass
 
-    # Build gallery page and include input preview at the top (if available)
+                    method_columns.append(f"""
+                        <div class="method-column">
+                            <h4>✅ {method.title()} Fill</h4>
+                            <p><strong>{shapes} shapes</strong> • {size_str}</p>
+                            <p><a href="{rel_wrapper}" target="_blank">view fullscreen</a> | <a href="{rel_svg}" target="_blank">raw SVG</a></p>
+                            <div class="thumbnail-container" onclick="window.open('{rel_wrapper}', '_blank')">
+                                <img src="{rel_svg}" alt="{geom} {method} fill">
+                            </div>
+                        </div>
+                    """)
+                else:
+                    method_columns.append(f"""
+                        <div class="method-column">
+                            <h4>⚠ {method.title()} Fill</h4>
+                            <p>Failed to generate</p>
+                            <div class="thumbnail-container error">
+                                <p>No SVG generated</p>
+                            </div>
+                        </div>
+                    """)
+            else:
+                method_columns.append(f"""
+                    <div class="method-column">
+                        <h4>{method.title()} Fill</h4>
+                        <p>Not selected</p>
+                        <div class="thumbnail-container">
+                            <p>-</p>
+                        </div>
+                    </div>
+                """)
+        
+        # Create geometry comparison row
+        gallery_items.append(f"""
+            <div class="geometry-comparison">
+                <h3>{geom}</h3>
+                <div class="methods-row">
+                    {''.join(method_columns)}
+                </div>
+            </div>
+        """)
+
+    # Build preview section
     preview_html = ""
     if preview_rel:
-        preview_html = f'<div style="display:flex;align-items:center;gap:18px;margin-bottom:16px"><div><h3>Input preview</h3><a href="{preview_rel}" target="_blank"><img src="{preview_rel}" style="max-width:420px;max-height:300px;border:1px solid #ccc"></a></div><div>{input_palette_html}</div></div>'
+        preview_html = f'<div style="margin-bottom:16px"><h3>Input preview</h3><a href="{preview_rel}" target="_blank"><img src="{preview_rel}" style="max-width:420px;max-height:300px;border:1px solid #ccc;object-fit:contain"></a></div>'
 
-    # FIXED: Added f before the string to make it an f-string and kept CSS braces doubled
+    # Enhanced gallery template with comparison layout
     html_content = f"""
-	<!DOCTYPE html>
-	<html>
-	<head>
-		<title>Cubist Art Gallery</title>
-		<style>
-			body{{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:20px}}
-			.gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}}
-			.gallery-item{{background:white;padding:15px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}}
-		</style>
-	</head>
-	<body>
-		<div class="header">
-			<h1>🎨 Cubist Art Gallery</h1>
-			<p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-		</div>
-		{preview_html}
-		<div class="gallery">
-			{''.join(gallery_items)}
-		</div>
-	</body>
-	</html>
-	"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Cubist Art Gallery - Fill Method Comparison</title>
+        <style>
+            body {{
+                font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                margin: 20px;
+                background-color: #f8f9fa;
+            }}
+            .header {{
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                margin-bottom: 20px;
+            }}
+            .geometry-comparison {{
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                margin-bottom: 20px;
+            }}
+            .methods-row {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 20px;
+                margin-top: 15px;
+            }}
+            .method-column {{
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 15px;
+                background: #f8f9fa;
+            }}
+            .thumbnail-container {{
+                width: 100%;
+                height: 250px;
+                border: 1px solid #ddd;
+                background: white;
+                cursor: pointer;
+                border-radius: 4px;
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: transform 0.2s ease;
+                position: relative;
+            }}
+            .thumbnail-container:hover {{
+                transform: scale(1.02);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            }}
+            .thumbnail-container img {{
+                max-width: 100%;
+                max-height: 100%;
+                width: auto;
+                height: auto;
+                object-fit: contain;
+                display: block;
+            }}
+            .thumbnail-container.error {{
+                background: #f8d7da;
+                color: #721c24;
+            }}
+            a {{
+                color: #007bff;
+                text-decoration: none;
+            }}
+            a:hover {{
+                text-decoration: underline;
+            }}
+            h3 {{
+                margin-top: 0;
+                color: #495057;
+                border-bottom: 2px solid #007bff;
+                padding-bottom: 8px;
+            }}
+            h4 {{
+                margin-top: 0;
+                color: #495057;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🎨 Cubist Art Gallery - Fill Method Comparison</h1>
+            <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Methods: {', '.join(fill_methods)}</p>
+        </div>
+        {preview_html}
+        <div class="gallery">
+            {''.join(gallery_items)}
+        </div>
+    </body>
+    </html>
+    """
     (output_dir / "index.html").write_text(html_content, encoding="utf-8")
 
 
 # ----------------- Flask routes -----------------
 @app.route("/")
 def index():
-    return render_template_string(
-        r"""
-<!doctype html><html><head><meta charset="utf-8"><title>Cubist Prod UI</title>
+    return Response(render_template_string("""
+<!doctype html><html><head><meta charset="utf-8"><title>Cubist Production UI v2.5</title>
 <style>
-body{font-family:system-ui,Arial;margin:18px} .row{margin-bottom:12px} input[type=text]{width:520px;padding:6px} select{padding:6px}
-.button{padding:8px 12px;border-radius:6px;border:1px solid #888;background:#2d6cdf;color:#fff}
-.button.secondary{background:#6c757d} .log{background:#111;color:#eee;padding:12px;height:300px;overflow:auto;font-family:monospace}
+body{font-family:system-ui,Arial;margin:18px;background-color:#f8f9fa} 
+.card{background:white;padding:20px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px}
+.row{margin-bottom:15px} 
+input[type=text]{width:520px;padding:8px;border:1px solid #ddd;border-radius:4px} 
+select{padding:8px;border:1px solid #ddd;border-radius:4px}
+.button{padding:10px 16px;border-radius:6px;border:none;background:#007bff;color:#fff;cursor:pointer;font-weight:bold}
+.button:hover{background:#0056b3}
+.button.secondary{background:#6c757d} 
+.button.secondary:hover{background:#545b62}
+.log{background:#111;color:#eee;padding:15px;height:300px;overflow:auto;font-family:'Courier New',monospace;border-radius:4px}
 .preview{max-width:360px;max-height:200px;border:1px solid #444;border-radius:6px}
-.points-input{width:100px;padding:6px;margin-right:8px}
+.points-input{width:100px;padding:8px;margin-right:8px;border:1px solid #ddd;border-radius:4px}
 .error{color:#dc3545;font-size:12px;margin-top:4px}
+.fill-method-section{background:#f8f9fa;padding:15px;border-radius:6px;border:1px solid #dee2e6}
+.fill-method-option{margin-bottom:10px;padding:8px;border:1px solid #ddd;border-radius:4px;background:white}
+.fill-method-option input[type=checkbox]{margin-right:8px}
+.fill-method-description{font-size:12px;color:#666;margin-left:24px}
+.status{margin:10px 0;font-weight:bold;padding:8px;border-radius:4px}
+.status.idle{background:#d4edda;color:#155724}
+.status.running{background:#cce7ff;color:#004085}
 </style>
 </head><body>
-<h1>🎨 Cubist Art — Production UI</h1>
+<h1>🎨 Cubist Art — Production UI v2.5.0</h1>
 
-<div class="row">
-  <label>Input image</label><br/>
-  <input id="input_image" type="text" placeholder="filename or absolute path"/>
-  <div style="margin-top:6px">
-    <select id="input_files_select" style="max-width:420px"></select>
-    <button class="button" onclick="useSelected()">Use selected</button>
-    <input id="file_input" type="file" style="margin-left:8px"/>
-    <button class="button" onclick="uploadFile()">Upload</button>
+<div class="card">
+  <h3>Input Configuration</h3>
+  <div class="row">
+    <label><strong>Input image</strong></label><br/>
+    <input id="input_image" type="text" placeholder="filename or absolute path"/>
+    <div style="margin-top:6px">
+      <select id="input_files_select" style="max-width:420px"></select>
+      <button class="button" onclick="useSelected()">Use selected</button>
+      <input id="file_input" type="file" style="margin-left:8px"/>
+      <button class="button" onclick="uploadFile()">Upload</button>
+    </div>
+    <div style="margin-top:8px">
+      <img id="input_preview" class="preview" src="" style="display:none"/>
+      <div><a id="open_input_link" href="#" target="_blank" style="display:none">open image in new tab</a></div>
+    </div>
   </div>
-  <div style="margin-top:8px">
-    <img id="input_preview" class="preview" src="" style="display:none"/>
-    <div><a id="open_input_link" href="#" target="_blank" style="display:none">open image in new tab</a></div>
+
+  <div class="row">
+    <label><strong>Points</strong></label><br/>
+    <input id="points" type="text" class="points-input" placeholder="e.g. 500" min="1" max="50000"/>
+    <span style="color:#666;font-size:12px">Enter number of shapes (1-50000)</span>
+    <div id="points-error" class="error" style="display:none"></div>
   </div>
 </div>
 
-<div class="row">
-  <label>Points</label><br/>
-  <input id="points" type="text" class="points-input" placeholder="e.g. 500" min="1" max="50000"/>
-  <span style="color:#666;font-size:12px">Enter number of shapes (1-50000)</span>
-  <div id="points-error" class="error" style="display:none"></div>
+<div class="card">
+  <h3>Fill Methods (Select Multiple for Side-by-Side Comparison)</h3>
+  <div class="fill-method-section">
+    <div class="fill-method-option">
+      <label>
+        <input type="checkbox" name="fill_method" value="default" checked/>
+        <strong>Default Fill</strong>
+      </label>
+      <div class="fill-method-description">Base shapes only - traditional algorithm</div>
+    </div>
+    <div class="fill-method-option">
+      <label>
+        <input type="checkbox" name="fill_method" value="cascade"/>
+        <strong>Cascade Fill</strong>
+      </label>
+      <div class="fill-method-description">Base shapes + gap filling - higher density, better coverage</div>
+    </div>
+  </div>
 </div>
 
-<div class="row">
-  <label>Geometries</label>
-  <div>
+<div class="card">
+  <h3>Geometries</h3>
+  <div class="row">
     {% for g in geoms %}
-      <label style="margin-right:12px"><input type="checkbox" id="geom_{{g}}" checked/> {{g}}</label>
+      <label style="margin-right:15px;display:inline-block">
+        <input type="checkbox" id="geom_{{g}}" {% if loop.index <= 3 %}checked{% endif %}/> 
+        <strong>{{g}}</strong>
+      </label>
     {% endfor %}
   </div>
 </div>
 
-<div class="row">
-  <label><input id="auto_open" type="checkbox" checked/> Auto-open gallery</label>
-  <label style="margin-left:18px"><input id="verbose" type="checkbox"/> Verbose</label>
+<div class="card">
+  <h3>Execution</h3>
+  <div class="row">
+    <label><input id="auto_open" type="checkbox" checked/> <strong>Auto-open gallery</strong></label>
+    <label style="margin-left:20px"><input id="verbose" type="checkbox"/> <strong>Verbose logging</strong></label>
+  </div>
+
+  <div class="row">
+    <button class="button" id="run_btn" onclick="runBatch()">🚀 Run Batch</button>
+    <button class="button secondary" onclick="clearLog()">Clear Log</button>
+    <button class="button secondary" onclick="copyLog()">Copy Log</button>
+  </div>
+  
+  <div id="status" class="status idle">Status: Idle</div>
 </div>
 
-<div class="row">
-  <button class="button" id="run_btn" onclick="runBatch()">🚀 Run Batch</button>
-  <button class="button secondary" onclick="clearLog()">Clear Log</button>
-  <button class="button" onclick="copyLog()">Copy Log</button>
-  <span id="status_text" style="margin-left:12px"></span>
+<div class="card">
+  <h3>Execution Log</h3>
+  <div id="log" class="log"></div>
 </div>
-
-<div id="log" class="log"></div>
 
 <script>
-const geoms = JSON.parse('{{ geoms_json|safe }}');
+const geoms = {{ geoms_json|safe }};
 
 function validatePoints(value) {
   const num = parseInt(value);
@@ -902,12 +764,27 @@ async function uploadFile(){
   const fd = new FormData(); fd.append('file', inp.files[0]);
   const r = await fetch('/upload',{method:'POST', body:fd});
   const j = await r.json();
-  if(r.ok && j.filename){ await loadInputFiles(); document.getElementById('input_files_select').value = j.filename; useSelected(); }
-  else alert('Upload failed: ' + (j.error || 'unknown'));
+  if(r.ok && j.filename){ 
+    await loadInputFiles(); 
+    document.getElementById('input_files_select').value = j.filename; 
+    useSelected(); 
+  } else {
+    alert('Upload failed: ' + (j.error || 'unknown'));
+  }
 }
 
 function clearLog(){ document.getElementById('log').innerHTML = ''; }
-function copyLog(){ navigator.clipboard.writeText(document.getElementById('log').innerText).then(()=>{ alert('Log copied') }, ()=> alert('Copy failed')); }
+function copyLog(){ 
+  navigator.clipboard.writeText(document.getElementById('log').innerText).then(
+    ()=>{ alert('Log copied') }, 
+    ()=> alert('Copy failed')
+  ); 
+}
+
+function getSelectedFillMethods() {
+  const checkboxes = document.querySelectorAll('input[name="fill_method"]:checked');
+  return Array.from(checkboxes).map(cb => cb.value);
+}
 
 async function savePrefs(obj){
   try{
@@ -917,7 +794,8 @@ async function savePrefs(obj){
       points: pointsValidation.valid ? pointsValidation.value : 500,
       geoms: Array.from(geoms).filter(g=>document.getElementById('geom_'+g).checked),
       auto_open_gallery: document.getElementById('auto_open').checked,
-      verbose_probe: document.getElementById('verbose').checked 
+      verbose_probe: document.getElementById('verbose').checked,
+      fill_methods: getSelectedFillMethods()
     };
     const payload = Object.assign(base, obj||{});
     await fetch('/save_prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -925,20 +803,24 @@ async function savePrefs(obj){
 }
 
 document.addEventListener('DOMContentLoaded', async ()=>{
-  // Add points validation listener
   document.getElementById('points').addEventListener('input', updatePointsValidation);
   document.getElementById('points').addEventListener('blur', updatePointsValidation);
   
-  // populate geometry checkboxes labels if needed and hook changes to savePrefs
   await loadInputFiles();
+  
   document.getElementById('auto_open').addEventListener('change', ()=> savePrefs());
   document.getElementById('verbose').addEventListener('change', ()=> savePrefs());
+  
   geoms.forEach(g=>{
     const el = document.getElementById('geom_'+g);
     if(el) el.addEventListener('change', ()=> savePrefs());
   });
   
-  // load prefs
+  document.querySelectorAll('input[name="fill_method"]').forEach(checkbox => {
+    checkbox.addEventListener('change', () => savePrefs());
+  });
+  
+  // Load prefs
   try{
     const p = await (await fetch('/prefs')).json();
     if(p.input_image) document.getElementById('input_image').value = p.input_image;
@@ -948,9 +830,15 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     }
     document.getElementById('auto_open').checked = p.auto_open_gallery !== false;
     document.getElementById('verbose').checked = !!(p.verbose_probe || p.verbose);
-    setInputPreview(p.input_image || '');
     
-    // Validate points after loading
+    if(Array.isArray(p.fill_methods)){
+      p.fill_methods.forEach(method => {
+        const checkbox = document.querySelector(`input[name="fill_method"][value="${method}"]`);
+        if(checkbox) checkbox.checked = true;
+      });
+    }
+    
+    setInputPreview(p.input_image || '');
     updatePointsValidation();
   }catch(e){ console.warn('prefs load', e); }
 });
@@ -965,27 +853,38 @@ async function runBatch(){
     return;
   }
   
-  const exists = await (await fetch('/file_exists?file=' + encodeURIComponent(inputImage))).json();
-  if(!exists.exists && !confirm('Input not found on server. Continue?')) return;
   const selected = geoms.filter(g=>document.getElementById('geom_'+g).checked);
   if(selected.length===0){ alert('Select at least one geometry'); return; }
+  
+  const fillMethods = getSelectedFillMethods();
+  if(fillMethods.length===0){ alert('Select at least one fill method'); return; }
+  
   const payload = {
     input_image: inputImage,
     points: pointsValidation.value,
     seed: 42,
     geoms: selected,
+    fill_methods: fillMethods,
     auto_open: document.getElementById('auto_open').checked,
     verbose: document.getElementById('verbose').checked
   };
+  
   await fetch('/run_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  document.getElementById('status_text').textContent = 'Batch started...';
 }
 
-// polling logs/status
+// Polling logs/status
 setInterval(async ()=>{
   try{
     const st = await (await fetch('/status')).json();
-    document.getElementById('status_text').textContent = st.busy ? 'Running...' : 'Idle';
+    const statusEl = document.getElementById('status');
+    if(st.busy) {
+      statusEl.textContent = 'Status: Running...';
+      statusEl.className = 'status running';
+    } else {
+      statusEl.textContent = 'Status: Idle';
+      statusEl.className = 'status idle';
+    }
+    
     const logs = await (await fetch('/logs')).json();
     if(Array.isArray(logs) && logs.length){
       const container = document.getElementById('log');
@@ -996,10 +895,7 @@ setInterval(async ()=>{
 }, 1000);
 </script>
 </body></html>
-""",
-        geoms_json=json.dumps(GEOMS),
-        geoms=GEOMS,
-    )
+    """, geoms_json=json.dumps(GEOMS), geoms=GEOMS), content_type='text/html; charset=utf-8')
 
 
 @app.route("/input_files")
@@ -1010,11 +906,7 @@ def input_files():
         if input_dir.exists():
             for p in sorted(input_dir.iterdir()):
                 if p.is_file() and p.suffix.lower() in (
-                    ".jpg",
-                    ".jpeg",
-                    ".png",
-                    ".gif",
-                    ".webp",
+                    ".jpg", ".jpeg", ".png", ".gif", ".webp",
                 ):
                     files.append(p.name)
     except Exception:
@@ -1031,45 +923,13 @@ def preview():
         p = Path(fname)
         if p.is_absolute():
             p_res = p.resolve()
-            try:
-                p_res.relative_to(ROOT)
-            except Exception:
-                return "Forbidden", 403
         else:
             p_res = (ROOT / "input" / fname).resolve()
-            try:
-                p_res.relative_to(ROOT)
-            except Exception:
-                return "Forbidden", 403
         if p_res.exists() and p_res.is_file():
             return send_file(p_res)
     except Exception:
         pass
     return "Not found", 404
-
-
-@app.route("/file_exists")
-def file_exists():
-    fname = request.args.get("file", "")
-    if not fname:
-        return jsonify({"exists": False})
-    try:
-        p = Path(fname)
-        if p.is_absolute():
-            p_res = p.resolve()
-            try:
-                p_res.relative_to(ROOT)
-            except Exception:
-                return jsonify({"exists": False})
-        else:
-            p_res = (ROOT / "input" / fname).resolve()
-            try:
-                p_res.relative_to(ROOT)
-            except Exception:
-                return jsonify({"exists": False})
-        return jsonify({"exists": p_res.exists()})
-    except Exception:
-        return jsonify({"exists": False})
 
 
 @app.route("/upload", methods=["POST"])
@@ -1108,34 +968,21 @@ def run_batch():
     global RUN_THREAD
     if BUSY:
         return jsonify({"error": "Already running"}), 400
+    
     data = request.get_json() or {}
-    raw_input = data.get("input_image", "")
-    try:
-        p = Path(raw_input)
-        if p.is_absolute():
-            resolved = p.resolve()
-        else:
-            resolved = (ROOT / "input" / raw_input).resolve()
-        try:
-            resolved.relative_to(ROOT)
-        except Exception:
-            _log(f"Warning: input {resolved} outside project root", "warning")
-    except Exception:
-        resolved = Path(raw_input)
+    
     prefs = _load_prefs()
     prefs.update(data)
-    prefs["input_image"] = str(resolved)
-    prefs["verbose_probe"] = bool(
-        data.get("verbose", prefs.get("verbose_probe", False))
-    )
     _save_prefs(prefs)
+    
     RUN_THREAD = threading.Thread(
         target=_run_batch,
         args=(
             data.get("geoms", GEOMS[:3]),
-            str(resolved),
+            data.get("input_image", ""),
             int(data.get("points", 500)),
             int(data.get("seed", 42)),
+            data.get("fill_methods", ["default"]),
             bool(data.get("auto_open", True)),
             bool(data.get("verbose", False)),
         ),
@@ -1166,18 +1013,10 @@ def prefs():
     return jsonify(_load_prefs())
 
 
-@app.route("/gallery/<path:batch_id>")
-def gallery(batch_id):
-    gallery_path = OUT_ROOT / batch_id / "index.html"
-    if gallery_path.exists():
-        return send_file(gallery_path)
-    return "Gallery not found", 404
-
-
 if __name__ == "__main__":
-    print("Production UI ready - v2.5.0 enhanced")
-    print("🎨 Server running at http://127.0.0.1:5123")
+    print("🎨 Cubist Production UI v2.5.0 - Side-by-Side Fill Comparison")
+    print("🚀 Server running at http://127.0.0.1:5123")
     try:
         app.run(host="127.0.0.1", port=5123, debug=False)
-    except KeyboardInterrupt:
-        print("\nShutdown complete")
+    except Exception as e:
+        print(f"❌ Server failed to start: {e}")

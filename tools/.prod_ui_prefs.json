@@ -6,13 +6,14 @@
   "export_svg": true,
   "auto_open_gallery": true,
   "geoms": [
-    "delaunay",
-    "voronoi",
-    "rectangles",
-    "poisson_disk",
-    "scatter_circles"
+    "rectangles"
   ],
   "auto_open": true,
   "verbose": true,
-  "verbose_probe": true
+  "verbose_probe": true,
+  "fill_method": "cascade",
+  "fill_methods": [
+    "default",
+    "cascade"
+  ]
 }

@@ -58,6 +58,33 @@ def load_geometry(name: str):
     raise ImportError(f"Could not load geometry '{name}' via any namespace ({msgs})")
 
 
+def parse_params(param_list):
+    """Parse --param key=value arguments into a dictionary."""
+    params = {}
+    if param_list:
+        for param in param_list:
+            if "=" in param:
+                key, value = param.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                
+                # Convert boolean strings
+                if value.lower() in ("true", "false"):
+                    params[key] = value.lower() == "true"
+                # Convert numeric values
+                elif value.replace(".", "").replace("-", "").isdigit():
+                    if "." in value:
+                        params[key] = float(value)
+                    else:
+                        params[key] = int(value)
+                else:
+                    params[key] = value
+            else:
+                # Flag parameter (no value)
+                params[param.strip()] = True
+    return params
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True)
@@ -65,15 +92,13 @@ def main():
     ap.add_argument("--geometry", required=True)
     ap.add_argument("--points", type=int, default=4000)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--param", action="append")
+    ap.add_argument("--param", action="append", help="Parameters as key=value pairs")
     ap.add_argument("--export-svg", action="store_true")
     ap.add_argument("--cascade-stages", type=int, default=3)
     ap.add_argument("--enable-plugin-exec", action="store_true")
     ap.add_argument("--pipeline")
     ap.add_argument("--quiet", action="store_true")
-    ap.add_argument(
-        "--verbose", action="store_true"
-    )  # <-- ADDED: allow verbose flag to be passed through
+    ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
     root = Path(__file__).resolve().parent
@@ -143,6 +168,14 @@ def main():
         canvas_size = (1200, 800)
         input_image = None
 
+    # Parse parameters from --param arguments
+    params = parse_params(args.param)
+    
+    if args.verbose:
+        print(f"[cli] Parsed parameters: {params}")
+        print(f"[cli] Canvas size: {canvas_size}")
+        print(f"[cli] Geometry: {args.geometry}")
+
     # Generate shapes using multiple candidate methods
     doc_or_shapes = None
     render_candidates = (
@@ -163,8 +196,7 @@ def main():
                     sig = inspect.signature(fn)
                     kwargs = {}
 
-                    # Add parameters that the function accepts
-                    # FIXED: Check for total_points first, then points
+                    # Add core parameters that the function accepts
                     if "total_points" in sig.parameters:
                         kwargs["total_points"] = args.points
                     elif "points" in sig.parameters:
@@ -176,9 +208,17 @@ def main():
                         kwargs["cascade_stages"] = args.cascade_stages
                     if "canvas_size" in sig.parameters:
                         kwargs["canvas_size"] = canvas_size
-                    # FIXED: Pass input_image to geometry plugins
                     if "input_image" in sig.parameters:
                         kwargs["input_image"] = input_image
+                    if "verbose" in sig.parameters:
+                        kwargs["verbose"] = args.verbose
+                        
+                    # Add all parsed parameters
+                    for key, value in params.items():
+                        if key in sig.parameters:
+                            kwargs[key] = value
+                            if args.verbose:
+                                print(f"[cli] Setting parameter: {key} = {value}")
 
                     # Call with appropriate parameters
                     if cand == "render":
@@ -288,6 +328,7 @@ def run_pipeline(
     enable_plugin_exec: bool = False,
     pipeline: str | None = None,
     quiet: bool = True,
+    **extra_params
 ):
     """Adapter-friendly pipeline used by tests and CLI callers."""
     from pathlib import Path
@@ -408,33 +449,30 @@ def run_pipeline(
         "make",
         "create",
     )
+    
+    # Prepare all parameters including extra_params
+    all_params = {
+        "total_points": int(points),
+        "points": int(points),
+        "seed": int(seed),
+        "cascade_stages": int(cascade_stages),
+        "input": str(inp),
+        "input_path": str(inp),
+        "image": str(inp),
+        "path": str(inp),
+        "canvas_size": _canvas_size,
+        "input_image": _input_image,
+        **extra_params  # Include any additional parameters
+    }
+    
     try:
         for cand in render_candidates:
             if callable(cand):
-                doc_or_shapes = _call_with_best_effort(
-                    cand,
-                    str(inp),
-                    total_points=int(points),  # FIXED: Use total_points
-                    points=int(points),  # Keep points for legacy compatibility
-                    seed=int(seed),
-                    cascade_stages=int(cascade_stages),
-                    input=str(inp),
-                    input_path=str(inp),
-                    image=str(inp),
-                    path=str(inp),
-                    canvas_size=_canvas_size,
-                    input_image=_input_image,  # FIXED: Pass input_image
-                )
+                doc_or_shapes = _call_with_best_effort(cand, str(inp), **all_params)
                 break
             elif isinstance(cand, str) and hasattr(geom_mod, cand):
                 doc_or_shapes = _call_with_best_effort(
-                    getattr(geom_mod, cand),
-                    total_points=int(points),  # FIXED: Use total_points
-                    points=int(points),  # Keep points for legacy compatibility
-                    seed=int(seed),
-                    cascade_stages=int(cascade_stages),
-                    canvas_size=_canvas_size,
-                    input_image=_input_image,  # FIXED: Pass input_image
+                    getattr(geom_mod, cand), **all_params
                 )
                 break
     except Exception:

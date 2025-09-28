@@ -277,4 +277,36 @@ Example deliverable checklist (to include with each change)
 - [ ] prod_ui.py started and E2E steps executed (paste transcript snippet)
 - [ ] Gallery index.html path provided and confirmed
 
-Keep this "AI Requirements" section as the authoritative instruction set for code deliveries and validation. When you provide code, reference this section in your message and include the required validation outputs.
+### Environment Dependencies (mandatory)
+When new Python packages or system libraries are required by delivered code, include explicit environment dependency instructions so reviewers can reproduce the tested environment exactly.
+
+- Provide exact pip install commands with pinned versions, for example:
+  - pip install package==1.2.3
+  - pip install "package>=1.2,<1.3"
+- Include a requirements file or a snippet listing new entries and versions:
+  - requirements.txt (append new lines for delivered features)
+  - Example line: pillow==9.5.0
+- Provide venv creation and install steps:
+  - python -m venv .venv
+  - Windows PowerShell: .\.venv\Scripts\Activate.ps1
+  - macOS / Linux: source .venv/bin/activate
+  - pip install -r requirements.txt
+- Provide a one‑line verification command for each new dependency:
+  - python -c "import package; print(package.__version__)"
+  - Example: python -c "import PIL; print(PIL.__version__)"
+- Note any non‑Python system dependencies explicitly and give exact install commands or links:
+  - Example (Ubuntu): sudo apt-get install -y libcairo2-dev libgdk-pixbuf2.0-dev
+  - Example (Windows): link to prebuilt DLL or chocolatey command if applicable
+- If binary wheels or compilation are required, document the preferred platforms and any pip flags:
+  - pip install --only-binary=:all: package
+  - or provide build instructions for platform-specific compilation
+- For optional features, mark dependencies as optional and show how to install them:
+  - pip install package[extra]
+- For CI or reproducibility, provide a minimal Dockerfile snippet or a single command that reproduces the validated environment.
+- When delivering code, include the minimal check commands used during validation:
+  - python -m py_compile <file.py>
+  - pytest -q tests/<test_module>.py::test_name
+  - python tools\prod_ui.py  # to exercise GUI E2E
+- If the feature requires large or system‑level assets (e.g., large model files), provide SHA256 checksums and the exact download command.
+
+Append this subsection to the AI Requirements section so it is treated as a required checklist for all future AI deliveries.
