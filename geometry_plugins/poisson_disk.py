@@ -1,5 +1,5 @@
 # geometry_plugins/poisson_disk.py - Original Working Algorithm + Minimal Cascade
-# Preserves exact original working implementation
+# Fixed parameters for proper blue noise visualization
 
 from __future__ import annotations
 import math
@@ -232,9 +232,9 @@ def generate(
         print(f"[poisson_disk] Poisson disk generation - Cascade: {'ENABLED' if cascade_fill_enabled else 'DISABLED'}")
         print(f"[poisson_disk] Canvas: {canvas_size[0]}x{canvas_size[1]}, Target: {total_points} points")
     
-    # Adjust target for cascade mode
+    # Adjust target for cascade mode - more aggressive for higher density
     if cascade_fill_enabled:
-        base_target = max(int(total_points * 0.6), 20)
+        base_target = max(int(total_points * 0.7), 20)  # Increased from 0.6 to 0.7
         if verbose:
             print(f"[poisson_disk] Cascade mode: generating {base_target} base points, then cascade fill")
     else:
@@ -242,13 +242,14 @@ def generate(
         if verbose:
             print(f"[poisson_disk] Default mode: generating {base_target} points")
 
-    # Use reasonable min_dist_factor that preserves blue noise quality
+    # FIXED: Use smaller spacing for dense packing with no white space
     if min_dist_factor is None:
-        # Use conservative spacing to maintain blue noise characteristics
-        min_dist_factor = 0.015  # Fixed conservative value for quality
+        # Use even smaller value to allow more points to fit
+        # Smaller spacing = more points can be placed
+        min_dist_factor = 0.008  # Reduced from 0.012 for denser packing
         
         if verbose:
-            print(f"[poisson_disk] Using conservative min_dist_factor: {min_dist_factor} (preserves blue noise quality)")
+            print(f"[poisson_disk] Using ultra-dense packing min_dist_factor: {min_dist_factor}")
     else:
         if verbose:
             print(f"[poisson_disk] Using provided min_dist_factor: {min_dist_factor}")
@@ -270,13 +271,16 @@ def generate(
             y = random.uniform(0, height)
             points.append((x, y))
 
-    # Determine radius based on minimum distance to show proper spacing
+    # FIXED: Keep your successful 100% radius for complete coverage
     width, height = canvas_size
     diagonal = math.sqrt(width * width + height * height)
     min_dist = diagonal * min_dist_factor
     
-    # Set circle radius to show the spacing clearly
-    point_radius = min_dist * 0.3  # 30% of minimum distance for clear gaps
+    # Use your successful 100% setting for no white space
+    point_radius = min_dist * 1.0  # 100% of minimum distance = overlapping circles
+    
+    # Ensure reasonable minimum radius
+    point_radius = max(point_radius, 3.0)
     
     if verbose:
         print(f"[poisson_disk] Min distance: {min_dist:.1f} pixels")
@@ -304,10 +308,10 @@ def generate(
             print(f"[poisson_disk] Applying cascade fill")
         
         # Create small circles for cascade filling
-        cascade_radius = point_radius * cascade_intensity * 0.5
+        cascade_radius = point_radius * cascade_intensity * 0.4
         
         def generate_cascade_circle() -> Dict:
-            radius = random.uniform(cascade_radius * 0.7, cascade_radius * 1.3)
+            radius = random.uniform(cascade_radius * 0.6, cascade_radius * 1.2)
             return {
                 "type": "circle",
                 "cx": 0.0,  # Will be positioned by cascade system
@@ -356,11 +360,11 @@ def register(register_fn) -> None:
 
 def _sample_image_color(
     input_image, x: float, y: float, canvas_width: int, canvas_height: int
-) -> Tuple[int, int, int]:
+) -> str:
     """Sample color from input image at given coordinates, with fallback to gray if no image."""
     if input_image is None:
         # Fallback to a neutral gray if no image provided
-        return (128, 128, 128)
+        return "rgb(128,128,128)"
 
     try:
         # Get image dimensions
@@ -381,20 +385,20 @@ def _sample_image_color(
         if isinstance(pixel, tuple):
             if len(pixel) >= 3:
                 # RGB or RGBA
-                return (int(pixel[0]), int(pixel[1]), int(pixel[2]))
+                return f"rgb({int(pixel[0])},{int(pixel[1])},{int(pixel[2])})"
             elif len(pixel) == 1:
                 # Grayscale
-                return (int(pixel[0]), int(pixel[0]), int(pixel[0]))
+                return f"rgb({int(pixel[0])},{int(pixel[0])},{int(pixel[0])})"
         else:
             # Single value (grayscale)
-            return (int(pixel), int(pixel), int(pixel))
+            return f"rgb({int(pixel)},{int(pixel)},{int(pixel)})"
 
     except Exception:
         # Fallback to gray if sampling fails
-        return (128, 128, 128)
+        return "rgb(128,128,128)"
 
     # Default fallback
-    return (128, 128, 128)
+    return "rgb(128,128,128)"
 
 
 # NOTE: render() function removed to force CLI to use generate() directly
