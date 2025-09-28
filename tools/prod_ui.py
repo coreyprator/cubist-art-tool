@@ -1,4 +1,4 @@
-# tools/prod_ui.py - COMPLETE FIXED VERSION
+# tools/prod_ui.py - COMPLETE FIXED VERSION with UI improvements
 from __future__ import annotations
 
 import json
@@ -609,16 +609,47 @@ def _generate_gallery(
         svg_path = output_dir / geom / f"frame_{geom}.svg"
         wrapper_path = output_dir / geom / f"frame_{geom}.html"
         if success and svg_path.exists():
-            # FIXED: Better wrapper with proper SVG fitting
+            # FIXED: Improved wrapper with better SVG fitting to browser window
             try:
-                wrapper_html = """<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-html,body{{height:100%;margin:0;padding:0;background:#111;overflow:hidden}}
-.frame{{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;padding:10px;box-sizing:border-box}}
-object{{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}}
-</style>
-</head><body><div class="frame"><object data="frame_{geom}.svg" type="image/svg+xml"></object></div></body></html>"""
+                wrapper_html = f"""<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{geom} - Cubist Art</title>
+    <style>
+        html, body {{
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background: #111;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .svg-container {{
+            width: 95vw;
+            height: 95vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        object {{
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }}
+    </style>
+</head>
+<body>
+    <div class="svg-container">
+        <object data="frame_{geom}.svg" type="image/svg+xml"></object>
+    </div>
+</body>
+</html>"""
                 wrapper_path.parent.mkdir(parents=True, exist_ok=True)
                 wrapper_path.write_text(wrapper_html, encoding="utf-8")
             except Exception:
@@ -673,13 +704,13 @@ object{{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain
                             )
                             dist = _color_distance(best, rgb)
                             best_hex = _rgb_to_hex(best)
-                            mapping_lines.append(f"{c} -> {best_hex} (Δ={dist:.1f})")
+                            mapping_lines.append(f"{hexc} -> {best_hex} (Δ={dist:.1f})")
                             _log(
-                                f"{geom} fill {c} -> closest input {best_hex} Δ={dist:.1f}",
+                                f"{geom} fill {hexc} -> closest input {best_hex} Δ={dist:.1f}",
                                 "info",
                             )
                         elif rgb:
-                            _log(f"{geom} fill {c} parsed as {rgb}", "info")
+                            _log(f"{geom} fill {hexc} parsed as {rgb}", "info")
                     swatch_html += "</div>"
             except Exception as e:
                 _log(f"Color extraction failed for {geom}: {e}", "warning")
@@ -699,8 +730,8 @@ object{{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain
 				<p><strong>{shapes} shapes</strong> • {size_str} • <a href="{rel_wrapper}" target="_blank">open (fit)</a> | <a href="{rel_svg}" target="_blank">raw SVG</a></p>
 				{swatch_html}
 				{map_html}
-				<div class="thumbnail-container" onclick="window.open('{rel_wrapper}', '_blank')" style="cursor:pointer;border:1px solid #ddd;background:white;width:300px;height:200px;position:relative;overflow:hidden;">
-					<object data="{rel_svg}" type="image/svg+xml" style="width:100%;height:100%;object-fit:contain;pointer-events:none;"></object>
+				<div class="thumbnail-container" onclick="window.open('{rel_wrapper}', '_blank')" style="cursor:pointer;border:1px solid #ddd;background:white;width:300px;height:200px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+					<object data="{rel_svg}" type="image/svg+xml" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;pointer-events:none;"></object>
 				</div>
 			</div>
 			""")
@@ -717,8 +748,8 @@ object{{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain
     if preview_rel:
         preview_html = f'<div style="display:flex;align-items:center;gap:18px;margin-bottom:16px"><div><h3>Input preview</h3><a href="{preview_rel}" target="_blank"><img src="{preview_rel}" style="max-width:420px;max-height:300px;border:1px solid #ccc"></a></div><div>{input_palette_html}</div></div>'
 
-    # FIXED: Added f before the string to make it an f-string
-    html_content = """
+    # FIXED: Added f before the string to make it an f-string and kept CSS braces doubled
+    html_content = f"""
 	<!DOCTYPE html>
 	<html>
 	<head>
@@ -755,6 +786,8 @@ body{font-family:system-ui,Arial;margin:18px} .row{margin-bottom:12px} input[typ
 .button{padding:8px 12px;border-radius:6px;border:1px solid #888;background:#2d6cdf;color:#fff}
 .button.secondary{background:#6c757d} .log{background:#111;color:#eee;padding:12px;height:300px;overflow:auto;font-family:monospace}
 .preview{max-width:360px;max-height:200px;border:1px solid #444;border-radius:6px}
+.points-input{width:100px;padding:6px;margin-right:8px}
+.error{color:#dc3545;font-size:12px;margin-top:4px}
 </style>
 </head><body>
 <h1>🎨 Cubist Art — Production UI</h1>
@@ -775,8 +808,10 @@ body{font-family:system-ui,Arial;margin:18px} .row{margin-bottom:12px} input[typ
 </div>
 
 <div class="row">
-  <label>Points</label>
-  <select id="points"><option value="100">100</option><option value="500" selected>500</option><option value="1000">1000</option><option value="4000">4000</option></select>
+  <label>Points</label><br/>
+  <input id="points" type="text" class="points-input" placeholder="e.g. 500" min="1" max="50000"/>
+  <span style="color:#666;font-size:12px">Enter number of shapes (1-50000)</span>
+  <div id="points-error" class="error" style="display:none"></div>
 </div>
 
 <div class="row">
@@ -804,6 +839,35 @@ body{font-family:system-ui,Arial;margin:18px} .row{margin-bottom:12px} input[typ
 
 <script>
 const geoms = JSON.parse('{{ geoms_json|safe }}');
+
+function validatePoints(value) {
+  const num = parseInt(value);
+  if (isNaN(num)) return { valid: false, error: 'Must be a number' };
+  if (num < 1) return { valid: false, error: 'Must be at least 1' };
+  if (num > 50000) return { valid: false, error: 'Must be 50000 or less' };
+  return { valid: true, value: num };
+}
+
+function updatePointsValidation() {
+  const input = document.getElementById('points');
+  const errorDiv = document.getElementById('points-error');
+  const runBtn = document.getElementById('run_btn');
+  
+  const validation = validatePoints(input.value);
+  
+  if (validation.valid) {
+    input.style.borderColor = '';
+    errorDiv.style.display = 'none';
+    runBtn.disabled = false;
+    savePrefs();
+  } else {
+    input.style.borderColor = '#dc3545';
+    errorDiv.textContent = validation.error;
+    errorDiv.style.display = 'block';
+    runBtn.disabled = true;
+  }
+}
+
 async function loadInputFiles(){
   try{
     const res = await fetch('/input_files');
@@ -815,6 +879,7 @@ async function loadInputFiles(){
     });
   }catch(e){ console.warn(e); }
 }
+
 function setInputPreview(path){
   const img = document.getElementById('input_preview');
   const link = document.getElementById('open_input_link');
@@ -822,6 +887,7 @@ function setInputPreview(path){
   const url = '/preview?file=' + encodeURIComponent(path);
   img.src = url; img.style.display = 'inline-block'; link.href = url; link.style.display='inline';
 }
+
 function useSelected(){
   const sel = document.getElementById('input_files_select');
   if(!sel.value) return;
@@ -829,6 +895,7 @@ function useSelected(){
   setInputPreview(sel.value);
   savePrefs();
 }
+
 async function uploadFile(){
   const inp = document.getElementById('file_input');
   if(!inp.files || inp.files.length===0){ alert('Select file'); return; }
@@ -838,22 +905,30 @@ async function uploadFile(){
   if(r.ok && j.filename){ await loadInputFiles(); document.getElementById('input_files_select').value = j.filename; useSelected(); }
   else alert('Upload failed: ' + (j.error || 'unknown'));
 }
+
 function clearLog(){ document.getElementById('log').innerHTML = ''; }
 function copyLog(){ navigator.clipboard.writeText(document.getElementById('log').innerText).then(()=>{ alert('Log copied') }, ()=> alert('Copy failed')); }
 
 async function savePrefs(obj){
   try{
-    const base = { input_image: document.getElementById('input_image').value,
-                   points: parseInt(document.getElementById('points').value),
-                   geoms: Array.from(geoms).filter(g=>document.getElementById('geom_'+g).checked),
-                   auto_open_gallery: document.getElementById('auto_open').checked,
-                   verbose_probe: document.getElementById('verbose').checked };
+    const pointsValidation = validatePoints(document.getElementById('points').value);
+    const base = { 
+      input_image: document.getElementById('input_image').value,
+      points: pointsValidation.valid ? pointsValidation.value : 500,
+      geoms: Array.from(geoms).filter(g=>document.getElementById('geom_'+g).checked),
+      auto_open_gallery: document.getElementById('auto_open').checked,
+      verbose_probe: document.getElementById('verbose').checked 
+    };
     const payload = Object.assign(base, obj||{});
     await fetch('/save_prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   }catch(e){ console.warn('savePrefs', e); }
 }
 
 document.addEventListener('DOMContentLoaded', async ()=>{
+  // Add points validation listener
+  document.getElementById('points').addEventListener('input', updatePointsValidation);
+  document.getElementById('points').addEventListener('blur', updatePointsValidation);
+  
   // populate geometry checkboxes labels if needed and hook changes to savePrefs
   await loadInputFiles();
   document.getElementById('auto_open').addEventListener('change', ()=> savePrefs());
@@ -862,6 +937,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     const el = document.getElementById('geom_'+g);
     if(el) el.addEventListener('change', ()=> savePrefs());
   });
+  
   // load prefs
   try{
     const p = await (await fetch('/prefs')).json();
@@ -873,19 +949,29 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     document.getElementById('auto_open').checked = p.auto_open_gallery !== false;
     document.getElementById('verbose').checked = !!(p.verbose_probe || p.verbose);
     setInputPreview(p.input_image || '');
+    
+    // Validate points after loading
+    updatePointsValidation();
   }catch(e){ console.warn('prefs load', e); }
 });
 
 async function runBatch(){
   const inputImage = document.getElementById('input_image').value.trim();
   if(!inputImage){ alert('Specify input'); return; }
+  
+  const pointsValidation = validatePoints(document.getElementById('points').value);
+  if(!pointsValidation.valid){
+    alert('Invalid points value: ' + pointsValidation.error);
+    return;
+  }
+  
   const exists = await (await fetch('/file_exists?file=' + encodeURIComponent(inputImage))).json();
   if(!exists.exists && !confirm('Input not found on server. Continue?')) return;
   const selected = geoms.filter(g=>document.getElementById('geom_'+g).checked);
   if(selected.length===0){ alert('Select at least one geometry'); return; }
   const payload = {
     input_image: inputImage,
-    points: parseInt(document.getElementById('points').value),
+    points: pointsValidation.value,
     seed: 42,
     geoms: selected,
     auto_open: document.getElementById('auto_open').checked,
@@ -1089,7 +1175,7 @@ def gallery(batch_id):
 
 
 if __name__ == "__main__":
-    print("Production UI ready - v2.4.0 enhanced")
+    print("Production UI ready - v2.5.0 enhanced")
     print("🎨 Server running at http://127.0.0.1:5123")
     try:
         app.run(host="127.0.0.1", port=5123, debug=False)
