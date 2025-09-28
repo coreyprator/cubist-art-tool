@@ -7,7 +7,7 @@
   "verbose_probe": true,
   "auto_open_gallery": true,
   "geoms": [
-    "poisson_disk"
+    "scatter_circles"
   ],
   "fill_methods": [
     "default",

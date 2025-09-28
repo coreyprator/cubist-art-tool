@@ -334,7 +334,7 @@ def _generate_comparison_gallery(
     # Enhanced wrapper template for proper image fitting
     def create_wrapper_template(geom_name: str, method: str) -> str:
         method_suffix = "_cascade" if method == "cascade" else "_default"
-        return """<!doctype html>
+        return f"""<!doctype html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -489,7 +489,7 @@ def _generate_comparison_gallery(
         preview_html = f'<div style="margin-bottom:16px"><h3>Input preview</h3><a href="{preview_rel}" target="_blank"><img src="{preview_rel}" style="max-width:420px;max-height:300px;border:1px solid #ccc;object-fit:contain"></a></div>'
 
     # Enhanced gallery template with comparison layout
-    html_content = """
+    html_content = f"""
     <!DOCTYPE html>
     <html>
     <head>
