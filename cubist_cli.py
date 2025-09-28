@@ -67,7 +67,7 @@ def parse_params(param_list):
                 key, value = param.split("=", 1)
                 key = key.strip()
                 value = value.strip()
-                
+
                 # Convert boolean strings
                 if value.lower() in ("true", "false"):
                     params[key] = value.lower() == "true"
@@ -170,7 +170,7 @@ def main():
 
     # Parse parameters from --param arguments
     params = parse_params(args.param)
-    
+
     if args.verbose:
         print(f"[cli] Parsed parameters: {params}")
         print(f"[cli] Canvas size: {canvas_size}")
@@ -212,7 +212,7 @@ def main():
                         kwargs["input_image"] = input_image
                     if "verbose" in sig.parameters:
                         kwargs["verbose"] = args.verbose
-                        
+
                     # Add all parsed parameters
                     for key, value in params.items():
                         if key in sig.parameters:
@@ -449,7 +449,7 @@ def run_pipeline(
         "make",
         "create",
     )
-    
+
     # Prepare all parameters including extra_params
     all_params = {
         "total_points": int(points),
@@ -464,7 +464,7 @@ def run_pipeline(
         "input_image": _input_image,
         **extra_params  # Include any additional parameters
     }
-    
+
     try:
         for cand in render_candidates:
             if callable(cand):

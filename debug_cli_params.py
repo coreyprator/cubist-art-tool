@@ -23,10 +23,10 @@ try:
     from cubist_cli import load_geometry
     geom_mod = load_geometry("rectangles")
     print(f"✅ Loaded geometry module: {geom_mod}")
-    
+
     # Check what function the CLI would call
     render_candidates = ("render", "generate", "render_shapes", "run", "build", "make", "create")
-    
+
     for cand in render_candidates:
         if hasattr(geom_mod, cand):
             fn = getattr(geom_mod, cand)
@@ -49,26 +49,26 @@ try:
     canvas_size = (800, 600)
     points = 500
     seed = 42
-    
+
     # Parameters that CLI parsed
     params = {
         "cascade_fill_enabled": True,
         "cascade_intensity": 0.8,
         "verbose": True
     }
-    
+
     # Build kwargs like CLI does
     kwargs = {}
-    
+
     fn = getattr(geom_mod, "generate")
     sig = inspect.signature(fn)
-    
+
     # Add core parameters
     if "total_points" in sig.parameters:
         kwargs["total_points"] = points
     elif "points" in sig.parameters:
         kwargs["points"] = points
-    
+
     if "seed" in sig.parameters:
         kwargs["seed"] = seed
     if "canvas_size" in sig.parameters:
@@ -77,20 +77,20 @@ try:
         kwargs["input_image"] = None
     if "verbose" in sig.parameters:
         kwargs["verbose"] = True
-        
+
     # Add parsed parameters
     for key, value in params.items():
         if key in sig.parameters:
             kwargs[key] = value
             print(f"   Adding parameter: {key} = {value}")
-    
+
     print(f"Final kwargs: {kwargs}")
-    
+
     # Call like CLI does
     print("\nCalling generate() with CLI-style parameters...")
     result = fn(**kwargs)
     print(f"✅ Generated {len(result)} shapes")
-    
+
 except Exception as e:
     print(f"❌ CLI simulation failed: {e}")
     import traceback
@@ -99,7 +99,7 @@ except Exception as e:
 # Test 4: Check if there's a parameter name mismatch
 print("\n4. Checking for parameter name mismatches:")
 expected_params = [
-    "canvas_size", "total_points", "seed", "input_image", 
+    "canvas_size", "total_points", "seed", "input_image",
     "cascade_fill_enabled", "cascade_intensity", "verbose"
 ]
 

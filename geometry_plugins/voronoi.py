@@ -1,10 +1,20 @@
-# cubist_art v2.3.7 – geometry plugin: Voronoi
-# File: geometry_plugins/voronoi.py
+# geometry_plugins/voronoi.py - Working Original + Minimal Cascade Integration
+# Cubist Art v2.5.0 - Minimal enhancement to preserve working Voronoi generation
 
 from __future__ import annotations
 
 import random
 from typing import Dict, List, Tuple, Optional
+
+# Import universal cascade fill system
+try:
+    from cascade_fill_system import apply_universal_cascade_fill, sample_image_color
+except ImportError:
+    # Fallback if cascade system not available
+    def apply_universal_cascade_fill(shapes, canvas_size, target_count, shape_generator, seed=42, verbose=False):
+        return shapes
+    def sample_image_color(input_image, x, y, canvas_width, canvas_height):
+        return "rgb(128,128,128)"
 
 PLUGIN_NAME = "voronoi"
 
@@ -15,24 +25,60 @@ def generate(
     seed: int = 0,
     seed_points: Optional[List[Tuple[float, float]]] = None,
     input_image=None,
+    cascade_fill_enabled: bool = False,
+    cascade_intensity: float = 0.8,
+    verbose: bool = False,
     **params,
 ) -> List[Dict]:
+    """
+    Voronoi Diagram with Optional Cascade Fill
+    
+    Parameters:
+    - cascade_fill_enabled: Enable cascade fill system (default: False)
+    - cascade_intensity: How aggressively to fill gaps (0.0-1.0, default: 0.8)
+    """
     width, height = canvas_size
     rng = random.Random(int(seed))
+    
+    if verbose:
+        print(f"[voronoi] Voronoi generation - Cascade: {'ENABLED' if cascade_fill_enabled else 'DISABLED'}")
+        print(f"[voronoi] Canvas: {width}x{height}, Target: {total_points} cells")
+    
+    # Determine how many base Voronoi cells to generate
+    if cascade_fill_enabled:
+        base_count = max(int(total_points * 0.6), 8)  # 60% for base when cascade enabled
+        if verbose:
+            print(f"[voronoi] Cascade mode: generating {base_count} base cells, {total_points - base_count} cascade")
+    else:
+        base_count = total_points  # All cells in default mode
+        if verbose:
+            print(f"[voronoi] Default mode: generating {base_count} cells")
+    
+    # Generate seed points
     if seed_points and len(seed_points) >= 3:
         pts = [tuple(map(float, pt)) for pt in seed_points]
+        if verbose:
+            print(f"[voronoi] Using {len(pts)} provided seed points")
     else:
         pts = [
             (rng.uniform(0, width), rng.uniform(0, height))
-            for _ in range(max(3, int(total_points)))
+            for _ in range(max(3, int(base_count)))
         ]
+        if verbose:
+            print(f"[voronoi] Generated {len(pts)} random seed points")
+    
+    # Generate base Voronoi diagram (using your working original code)
+    base_shapes = []
     try:
         import numpy as _np
         from scipy.spatial import Voronoi as _Voronoi  # type: ignore
 
+        if verbose:
+            print("[voronoi] Using SciPy Voronoi diagram")
+        
         v = _Voronoi(_np.array(pts, dtype=float))
         regions = _voronoi_finite_polygons_2d(v)
-        shapes: List[Dict] = []
+        
         for region, site_idx in regions:
             poly = _clip_poly_to_bbox(region, (0.0, 0.0, float(width), float(height)))
             if len(poly) >= 3:
@@ -40,41 +86,117 @@ def generate(
                 centroid_x = sum(x for x, y in poly) / len(poly)
                 centroid_y = sum(y for x, y in poly) / len(poly)
 
-                shapes.append(
-                    {
-                        "type": "polygon",
-                        "points": [(float(x), float(y)) for x, y in poly],
-                        "fill": _sample_image_color(
-                            input_image, centroid_x, centroid_y, width, height
-                        ),
-                        "stroke": (0, 0, 0),
-                        "stroke_width": 0.5,
-                    }
-                )
-        if shapes:
+                base_shapes.append({
+                    "type": "polygon",
+                    "points": [(float(x), float(y)) for x, y in poly],
+                    "fill": _sample_image_color(
+                        input_image, centroid_x, centroid_y, width, height
+                    ),
+                    "stroke": "none",
+                    "stroke_width": 0,
+                })
+        
+        if verbose:
+            print(f"[voronoi] Generated {len(base_shapes)} Voronoi polygons")
+            
+    except Exception as e:
+        if verbose:
+            print(f"[voronoi] SciPy Voronoi failed ({e}), using circle fallback")
+        
+        # Fallback to circles only if Voronoi completely fails
+        radius = max(1.0, 0.0075 * min(width, height))
+        base_shapes = [
+            {
+                "type": "circle",
+                "cx": float(x),
+                "cy": float(y),
+                "r": float(radius),
+                "fill": _sample_image_color(input_image, x, y, width, height),
+                "stroke": "none",
+                "stroke_width": 0,
+            }
+            for (x, y) in pts
+        ]
+        if verbose:
+            print(f"[voronoi] Generated {len(base_shapes)} fallback circles")
 
-            def vkey(s):
+    # Apply cascade fill if enabled and we successfully generated polygons
+    final_shapes = base_shapes
+    
+    if (cascade_fill_enabled and len(base_shapes) < total_points and 
+        base_shapes and base_shapes[0].get("type") == "polygon"):
+        
+        if verbose:
+            print(f"[voronoi] Applying cascade fill to Voronoi polygons")
+        
+        # Create simple square shapes for cascade filling
+        def generate_cascade_cell() -> Dict:
+            size = rng.uniform(8, 20)  # Small squares
+            return {
+                "type": "polygon",
+                "points": [(0.0, 0.0), (size, 0.0), (size, size), (0.0, size)],
+                "fill": "rgb(128,128,128)",  # Placeholder
+                "stroke": "none",
+                "stroke_width": 0,
+            }
+        
+        # Apply universal cascade fill
+        enhanced_shapes = apply_universal_cascade_fill(
+            shapes=base_shapes,
+            canvas_size=canvas_size,
+            target_count=total_points,
+            shape_generator=generate_cascade_cell,
+            seed=seed + 1000,
+            verbose=verbose
+        )
+        
+        # Update colors for cascade shapes
+        cascade_shapes = enhanced_shapes[len(base_shapes):]
+        for shape in cascade_shapes:
+            if shape.get("type") == "polygon" and "points" in shape:
+                points = shape["points"]
+                centroid_x = sum(p[0] for p in points) / len(points)
+                centroid_y = sum(p[1] for p in points) / len(points)
+                color = _sample_image_color(input_image, centroid_x, centroid_y, width, height)
+                shape["fill"] = color
+        
+        final_shapes = enhanced_shapes
+        
+        if verbose:
+            print(f"[voronoi] Cascade fill added {len(cascade_shapes)} shapes")
+    elif cascade_fill_enabled and base_shapes and base_shapes[0].get("type") == "circle":
+        if verbose:
+            print(f"[voronoi] Cascade fill skipped - Voronoi fell back to circles")
+    elif cascade_fill_enabled:
+        if verbose:
+            print(f"[voronoi] Cascade fill skipped - target already reached or no shapes")
+    
+    # Sort results (using your original working sort)
+    if final_shapes:
+        def vkey(s):
+            if s.get("type") == "polygon":
                 pts = s.get("points", [])
                 cx = round(sum(x for x, _ in pts) / max(1, len(pts)), 3)
                 cy = round(sum(y for _, y in pts) / max(1, len(pts)), 3)
                 return (cx, cy)
+            elif s.get("type") == "circle":
+                return (round(s.get("cx", 0), 3), round(s.get("cy", 0), 3))
+            return (0, 0)
 
-            shapes = sorted(shapes, key=vkey)
-            return shapes
-    except Exception:
-        pass
-    radius = max(1.0, 0.0075 * min(width, height))
-    return [
-        {
-            "type": "circle",
-            "cx": float(x),
-            "cy": float(y),
-            "r": float(radius),
-            "fill": _sample_image_color(input_image, x, y, width, height),
-            "stroke": "none",
-        }
-        for (x, y) in pts
-    ]
+        final_shapes = sorted(final_shapes, key=vkey)
+    
+    if verbose:
+        shape_types = {}
+        for shape in final_shapes:
+            shape_type = shape.get("type", "unknown")
+            shape_types[shape_type] = shape_types.get(shape_type, 0) + 1
+        
+        print(f"[voronoi] Final count: {len(final_shapes)} shapes")
+        for shape_type, count in shape_types.items():
+            print(f"[voronoi]   {count} {shape_type}s")
+        print(f"[voronoi] Mode: {'CASCADE FILL' if cascade_fill_enabled else 'DEFAULT'}")
+    
+    return final_shapes
 
 
 def register(register_fn) -> None:
@@ -125,11 +247,13 @@ def _sample_image_color(
 
 
 def _voronoi_finite_polygons_2d(voronoi) -> List[Tuple[List[Tuple[float, float]], int]]:
+    """Generate finite Voronoi polygons from scipy Voronoi object."""
     import numpy as np
 
     shapes = []
     center = voronoi.points.mean(axis=0)
-    radius = voronoi.points.ptp().max() * 2
+    # Fix for NumPy 2.0 compatibility: use np.ptp() instead of .ptp() method
+    radius = np.ptp(voronoi.points, axis=0).max() * 2
     for point_idx, region_idx in enumerate(voronoi.point_region):
         vertices = voronoi.regions[region_idx]
         if -1 not in vertices and vertices:
@@ -161,7 +285,7 @@ def _voronoi_finite_polygons_2d(voronoi) -> List[Tuple[List[Tuple[float, float]]
             new_vertices.append(v1 if v1 >= 0 else v2)
             voronoi.vertices = np.vstack([voronoi.vertices, far_point])
             new_vertices.append(len(voronoi.vertices) - 1)
-        vs = np.unique(new_vertices)
+        vs = np.unique(new_vertices).astype(int)  # Fix: Ensure integer indices for NumPy 2.0
         pts = voronoi.vertices[vs]
         c = pts.mean(axis=0)
         angles = np.arctan2(pts[:, 1] - c[1], pts[:, 0] - c[0])
@@ -175,6 +299,7 @@ def _clip_poly_to_bbox(
     poly: List[Tuple[float, float]],
     bbox: Tuple[float, float, float, float],
 ) -> List[Tuple[float, float]]:
+    """Clip polygon to bounding box using Sutherland-Hodgman algorithm."""
     xmin, ymin, xmax, ymax = bbox
 
     def inside(p, edge):
@@ -218,3 +343,7 @@ def _clip_poly_to_bbox(
                 output.append(intersect(s, e, edge))
             s = e
     return output
+
+
+# NOTE: render() function removed to force CLI to use generate() directly
+# This avoids the CLI parameter passing bug with **kwargs functions

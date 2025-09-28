@@ -1,19 +1,18 @@
 {
   "input_image": "G:\\My Drive\\Code\\Python\\cubist_art\\input\\x_your_input_image.jpg",
-  "points": 4000,
+  "points": 8000,
   "seed": 42,
-  "cascade": 3,
   "export_svg": true,
+  "enable_plugin_exec": true,
+  "verbose_probe": true,
   "auto_open_gallery": true,
   "geoms": [
-    "rectangles"
+    "poisson_disk"
   ],
-  "auto_open": true,
-  "verbose": true,
-  "verbose_probe": true,
-  "fill_method": "cascade",
   "fill_methods": [
     "default",
     "cascade"
-  ]
+  ],
+  "auto_open": true,
+  "verbose": true
 }

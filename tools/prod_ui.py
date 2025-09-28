@@ -37,7 +37,7 @@ PREFS_PATH = TOOLS / ".prod_ui_prefs.json"
 # Geometry list
 GEOMS = [
     "rectangles",
-    "delaunay", 
+    "delaunay",
     "voronoi",
     "poisson_disk",
     "scatter_circles",
@@ -97,7 +97,7 @@ def _load_prefs() -> Dict[str, Any]:
     default_input = None
     for candidate in [
         "x_your_input_image.jpg",
-        "your_input_image.jpg", 
+        "your_input_image.jpg",
         "test_image.jpg",
         "sample.jpg",
     ]:
@@ -163,20 +163,20 @@ def _run_single_geometry(
         "--seed", str(seed),
         "--export-svg",
     ]
-    
+
     # Add fill method parameters
     if fill_method == "cascade":
         cmd.extend(["--param", "cascade_fill_enabled=true"])
         cmd.extend(["--param", "cascade_intensity=0.8"])
     else:
         cmd.extend(["--param", "cascade_fill_enabled=false"])
-    
+
     if verbose:
         cmd.append("--verbose")
 
     _log(f"Running: {geom} ({fill_method} fill)", "info")
     start_time = time.time()
-    
+
     try:
         result = subprocess.run(
             cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=300
@@ -211,7 +211,7 @@ def _run_single_geometry(
                     shapes = data.get("svg_shapes", "unknown")
             except Exception:
                 pass
-            
+
             _log(
                 f"✓ {geom} ({fill_method}): {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)",
                 "success",
@@ -225,7 +225,7 @@ def _run_single_geometry(
             )
             _log(f"  Error: {error_msg}", "error")
             return False, f"✗ {geom} ({fill_method}): failed - {error_msg}"
-            
+
     except subprocess.TimeoutExpired:
         _log(f"✗ {geom} ({fill_method}): timed out after 5 minutes", "error")
         return False, f"✗ {geom} ({fill_method}): timed out"
@@ -268,7 +268,7 @@ def _run_batch(
         results = []
         successful = 0
         total_combinations = len(geoms) * len(fill_methods)
-        
+
         for geom in geoms:
             for fill_method in fill_methods:
                 success, msg = _run_single_geometry(
@@ -308,13 +308,13 @@ def _run_batch(
 
 
 def _generate_comparison_gallery(
-    output_dir: Path, 
-    results: List[Tuple[str, bool, str, str]], 
+    output_dir: Path,
+    results: List[Tuple[str, bool, str, str]],
     input_image: str | Path,
     fill_methods: List[str]
 ) -> None:
     """Generate comparison gallery with side-by-side fill methods"""
-    
+
     # Copy input image for preview
     preview_rel = None
     try:
@@ -334,7 +334,7 @@ def _generate_comparison_gallery(
     # Enhanced wrapper template for proper image fitting
     def create_wrapper_template(geom_name: str, method: str) -> str:
         method_suffix = "_cascade" if method == "cascade" else "_default"
-        return f"""<!doctype html>
+        return """<!doctype html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -401,19 +401,19 @@ def _generate_comparison_gallery(
         results_by_geom[geom][method] = (success, msg)
 
     gallery_items = []
-    
+
     for geom in results_by_geom:
         # Create comparison row for this geometry
         method_columns = []
-        
+
         for method in fill_methods:
             method_suffix = "_cascade" if method == "cascade" else "_default"
             svg_path = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.svg"
             wrapper_path = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.html"
-            
+
             if method in results_by_geom[geom]:
                 success, msg = results_by_geom[geom][method]
-                
+
                 if success and svg_path.exists():
                     # Create enhanced wrapper with img tag instead of object
                     wrapper_html = create_wrapper_template(geom, method)
@@ -472,7 +472,7 @@ def _generate_comparison_gallery(
                         </div>
                     </div>
                 """)
-        
+
         # Create geometry comparison row
         gallery_items.append(f"""
             <div class="geometry-comparison">
@@ -489,7 +489,7 @@ def _generate_comparison_gallery(
         preview_html = f'<div style="margin-bottom:16px"><h3>Input preview</h3><a href="{preview_rel}" target="_blank"><img src="{preview_rel}" style="max-width:420px;max-height:300px;border:1px solid #ccc;object-fit:contain"></a></div>'
 
     # Enhanced gallery template with comparison layout
-    html_content = f"""
+    html_content = """
     <!DOCTYPE html>
     <html>
     <head>
@@ -597,14 +597,14 @@ def index():
     return Response(render_template_string("""
 <!doctype html><html><head><meta charset="utf-8"><title>Cubist Production UI v2.5</title>
 <style>
-body{font-family:system-ui,Arial;margin:18px;background-color:#f8f9fa} 
+body{font-family:system-ui,Arial;margin:18px;background-color:#f8f9fa}
 .card{background:white;padding:20px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px}
-.row{margin-bottom:15px} 
-input[type=text]{width:520px;padding:8px;border:1px solid #ddd;border-radius:4px} 
+.row{margin-bottom:15px}
+input[type=text]{width:520px;padding:8px;border:1px solid #ddd;border-radius:4px}
 select{padding:8px;border:1px solid #ddd;border-radius:4px}
 .button{padding:10px 16px;border-radius:6px;border:none;background:#007bff;color:#fff;cursor:pointer;font-weight:bold}
 .button:hover{background:#0056b3}
-.button.secondary{background:#6c757d} 
+.button.secondary{background:#6c757d}
 .button.secondary:hover{background:#545b62}
 .log{background:#111;color:#eee;padding:15px;height:300px;overflow:auto;font-family:'Courier New',monospace;border-radius:4px}
 .preview{max-width:360px;max-height:200px;border:1px solid #444;border-radius:6px}
@@ -671,7 +671,7 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
   <div class="row">
     {% for g in geoms %}
       <label style="margin-right:15px;display:inline-block">
-        <input type="checkbox" id="geom_{{g}}" {% if loop.index <= 3 %}checked{% endif %}/> 
+        <input type="checkbox" id="geom_{{g}}" {% if loop.index <= 3 %}checked{% endif %}/>
         <strong>{{g}}</strong>
       </label>
     {% endfor %}
@@ -690,7 +690,7 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
     <button class="button secondary" onclick="clearLog()">Clear Log</button>
     <button class="button secondary" onclick="copyLog()">Copy Log</button>
   </div>
-  
+
   <div id="status" class="status idle">Status: Idle</div>
 </div>
 
@@ -714,9 +714,9 @@ function updatePointsValidation() {
   const input = document.getElementById('points');
   const errorDiv = document.getElementById('points-error');
   const runBtn = document.getElementById('run_btn');
-  
+
   const validation = validatePoints(input.value);
-  
+
   if (validation.valid) {
     input.style.borderColor = '';
     errorDiv.style.display = 'none';
@@ -764,21 +764,21 @@ async function uploadFile(){
   const fd = new FormData(); fd.append('file', inp.files[0]);
   const r = await fetch('/upload',{method:'POST', body:fd});
   const j = await r.json();
-  if(r.ok && j.filename){ 
-    await loadInputFiles(); 
-    document.getElementById('input_files_select').value = j.filename; 
-    useSelected(); 
+  if(r.ok && j.filename){
+    await loadInputFiles();
+    document.getElementById('input_files_select').value = j.filename;
+    useSelected();
   } else {
     alert('Upload failed: ' + (j.error || 'unknown'));
   }
 }
 
 function clearLog(){ document.getElementById('log').innerHTML = ''; }
-function copyLog(){ 
+function copyLog(){
   navigator.clipboard.writeText(document.getElementById('log').innerText).then(
-    ()=>{ alert('Log copied') }, 
+    ()=>{ alert('Log copied') },
     ()=> alert('Copy failed')
-  ); 
+  );
 }
 
 function getSelectedFillMethods() {
@@ -789,7 +789,7 @@ function getSelectedFillMethods() {
 async function savePrefs(obj){
   try{
     const pointsValidation = validatePoints(document.getElementById('points').value);
-    const base = { 
+    const base = {
       input_image: document.getElementById('input_image').value,
       points: pointsValidation.valid ? pointsValidation.value : 500,
       geoms: Array.from(geoms).filter(g=>document.getElementById('geom_'+g).checked),
@@ -805,21 +805,21 @@ async function savePrefs(obj){
 document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('points').addEventListener('input', updatePointsValidation);
   document.getElementById('points').addEventListener('blur', updatePointsValidation);
-  
+
   await loadInputFiles();
-  
+
   document.getElementById('auto_open').addEventListener('change', ()=> savePrefs());
   document.getElementById('verbose').addEventListener('change', ()=> savePrefs());
-  
+
   geoms.forEach(g=>{
     const el = document.getElementById('geom_'+g);
     if(el) el.addEventListener('change', ()=> savePrefs());
   });
-  
+
   document.querySelectorAll('input[name="fill_method"]').forEach(checkbox => {
     checkbox.addEventListener('change', () => savePrefs());
   });
-  
+
   // Load prefs
   try{
     const p = await (await fetch('/prefs')).json();
@@ -830,14 +830,14 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     }
     document.getElementById('auto_open').checked = p.auto_open_gallery !== false;
     document.getElementById('verbose').checked = !!(p.verbose_probe || p.verbose);
-    
+
     if(Array.isArray(p.fill_methods)){
       p.fill_methods.forEach(method => {
         const checkbox = document.querySelector(`input[name="fill_method"][value="${method}"]`);
         if(checkbox) checkbox.checked = true;
       });
     }
-    
+
     setInputPreview(p.input_image || '');
     updatePointsValidation();
   }catch(e){ console.warn('prefs load', e); }
@@ -846,19 +846,19 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 async function runBatch(){
   const inputImage = document.getElementById('input_image').value.trim();
   if(!inputImage){ alert('Specify input'); return; }
-  
+
   const pointsValidation = validatePoints(document.getElementById('points').value);
   if(!pointsValidation.valid){
     alert('Invalid points value: ' + pointsValidation.error);
     return;
   }
-  
+
   const selected = geoms.filter(g=>document.getElementById('geom_'+g).checked);
   if(selected.length===0){ alert('Select at least one geometry'); return; }
-  
+
   const fillMethods = getSelectedFillMethods();
   if(fillMethods.length===0){ alert('Select at least one fill method'); return; }
-  
+
   const payload = {
     input_image: inputImage,
     points: pointsValidation.value,
@@ -868,7 +868,7 @@ async function runBatch(){
     auto_open: document.getElementById('auto_open').checked,
     verbose: document.getElementById('verbose').checked
   };
-  
+
   await fetch('/run_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 }
 
@@ -884,7 +884,7 @@ setInterval(async ()=>{
       statusEl.textContent = 'Status: Idle';
       statusEl.className = 'status idle';
     }
-    
+
     const logs = await (await fetch('/logs')).json();
     if(Array.isArray(logs) && logs.length){
       const container = document.getElementById('log');
@@ -968,13 +968,13 @@ def run_batch():
     global RUN_THREAD
     if BUSY:
         return jsonify({"error": "Already running"}), 400
-    
+
     data = request.get_json() or {}
-    
+
     prefs = _load_prefs()
     prefs.update(data)
     _save_prefs(prefs)
-    
+
     RUN_THREAD = threading.Thread(
         target=_run_batch,
         args=(

@@ -1,0 +1,20 @@
+1ffb8e4 2025-09-28 Fix Poisson disk: dense packing + overlapping circles
+2b4e051 2025-09-28 Restore geometry_plugins/poisson_disk.py from <commit>
+1398b2b 2025-09-28 v2.5.0 backup: rectangles with cascade fill working + production UI enhancements
+7fe8e68 2025-09-28 v2.5.0 backup: rectangles with cascade fill + production UI enhancements
+56d908e 2025-09-27 v2.5.0: Final updates
+294487f 2025-09-27 v2.5.0: Complete cubist art tool improvements
+c238b40 2025-09-23 pf: apply essential changes - 2025-09-23 21:23:34
+ab5e957 2025-09-01 v2.3.7: automated release publish
+8163630 2025-09-01 v2.3.7: stamped (safe)
+f01b715 2025-09-01 fix(stamper): self-protect & robust header/footer; preserve line endings
+374dfa9 2025-09-01 chore: normalize (post-hook)
+4c7a84a 2025-08-22 chore: ignore tmp_release_smoke artifacts
+5bdde82 2025-08-22 Release v2.2.3 (stable)
+1c1bc28 2025-08-18 test: move PowerShell snippets out of pytest path and enforce pytest discovery
+cbc762e 2025-08-18 test: move legacy PowerShell snippets out of pytest path
+78d5509 2025-08-18 test: quarantine legacy PowerShell snippets outside pytest path
+0f07a11 2025-08-18 docs: add CI badge
+1092fbf 2025-08-18 chore: track design files via Git LFS
+7664e7f 2025-08-18 chore: track .zip via Git LFS
+ff5f690 2025-08-18 cleanup: remove tracked output, logs, and archives

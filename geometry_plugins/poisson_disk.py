@@ -11,10 +11,14 @@ try:
     from cascade_fill_system import apply_universal_cascade_fill, sample_image_color
 except ImportError:
     # Fallback if cascade system not available
-    def apply_universal_cascade_fill(shapes, canvas_size, target_count, shape_generator, seed=42, verbose=False):
+    def apply_universal_cascade_fill(
+        shapes, canvas_size, target_count, shape_generator, seed=42, verbose=False
+    ):
         return shapes
+
     def sample_image_color(input_image, x, y, canvas_width, canvas_height):
         return "rgb(128,128,128)"
+
 
 PLUGIN_NAME = "poisson_disk"
 
@@ -50,9 +54,9 @@ def poisson_disk_sampling(
     # Calculate minimum distance between points (scaled by canvas size)
     diagonal = math.sqrt(width * width + height * height)
     min_dist = diagonal * min_dist_factor
-    
+
     if verbose:
-        print(f"[poisson_disk] Algorithm parameters:")
+        print("[poisson_disk] Algorithm parameters:")
         print(f"  Canvas: {width}x{height}, diagonal: {diagonal:.1f}")
         print(f"  min_dist_factor: {min_dist_factor}, min_dist: {min_dist:.1f}")
         print(f"  k attempts: {k}, target points: {total_points}")
@@ -72,9 +76,15 @@ def poisson_disk_sampling(
     def get_cell_idx(x: float, y: float) -> int:
         cell_x = int(x / cell_size)
         cell_y = int(y / cell_size)
-        idx = cell_x + cell_y * grid_width if 0 <= cell_x < grid_width and 0 <= cell_y < grid_height else -1
+        idx = (
+            cell_x + cell_y * grid_width
+            if 0 <= cell_x < grid_width and 0 <= cell_y < grid_height
+            else -1
+        )
         if verbose and len(points) < 5:  # Only log first few points
-            print(f"    get_cell_idx({x:.1f},{y:.1f}) -> cell({cell_x},{cell_y}) -> idx:{idx}")
+            print(
+                f"    get_cell_idx({x:.1f},{y:.1f}) -> cell({cell_x},{cell_y}) -> idx:{idx}"
+            )
         return idx
 
     def get_neighbors(x: float, y: float) -> List[Tuple[float, float]]:
@@ -92,7 +102,9 @@ def poisson_disk_sampling(
                     neighbors.append(grid[idx])
 
         if verbose and len(points) < 5:  # Only log first few points
-            print(f"    get_neighbors({x:.1f},{y:.1f}) found {len(neighbors)} neighbors")
+            print(
+                f"    get_neighbors({x:.1f},{y:.1f}) found {len(neighbors)} neighbors"
+            )
         return neighbors
 
     def is_valid(x: float, y: float) -> bool:
@@ -114,7 +126,9 @@ def poisson_disk_sampling(
             dist = math.sqrt(dx * dx + dy * dy)
             if dist < min_dist:
                 if verbose and len(points) < 5:
-                    print(f"    is_valid({x:.1f},{y:.1f}) -> FALSE (too close to {nx:.1f},{ny:.1f}, dist:{dist:.1f} < {min_dist:.1f})")
+                    print(
+                        f"    is_valid({x:.1f},{y:.1f}) -> FALSE (too close to {nx:.1f},{ny:.1f}, dist:{dist:.1f} < {min_dist:.1f})"
+                    )
                 return False
 
         if verbose and len(points) < 5:
@@ -141,17 +155,19 @@ def poisson_disk_sampling(
     # Track progress
     iteration = 0
     max_iterations = total_points * k * 2  # Safety limit
-    
+
     # While there are active points and we haven't reached the target count
     while active_points and len(points) < total_points and iteration < max_iterations:
         iteration += 1
-        
+
         # Get random active point
         idx = random.randint(0, len(active_points) - 1)
         x, y = active_points[idx]
 
         if verbose and iteration <= 10:  # Log first 10 iterations
-            print(f"  Iteration {iteration}: trying from active point {idx} at ({x:.1f},{y:.1f})")
+            print(
+                f"  Iteration {iteration}: trying from active point {idx} at ({x:.1f},{y:.1f})"
+            )
 
         # Try to find a new point
         found = False
@@ -162,8 +178,12 @@ def poisson_disk_sampling(
             new_x = x + radius * math.cos(angle)
             new_y = y + radius * math.sin(angle)
 
-            if verbose and iteration <= 5 and attempt < 3:  # Log first few attempts of early iterations
-                print(f"    Attempt {attempt}: ({new_x:.1f},{new_y:.1f}) radius:{radius:.1f} angle:{angle:.2f}")
+            if (
+                verbose and iteration <= 5 and attempt < 3
+            ):  # Log first few attempts of early iterations
+                print(
+                    f"    Attempt {attempt}: ({new_x:.1f},{new_y:.1f}) radius:{radius:.1f} angle:{angle:.2f}"
+                )
 
             if is_valid(new_x, new_y):
                 active_points.append((new_x, new_y))
@@ -174,9 +194,11 @@ def poisson_disk_sampling(
                     grid[cell_idx] = (new_x, new_y)
 
                 found = True
-                
+
                 if verbose and iteration <= 10:
-                    print(f"    SUCCESS: Added point {len(points)} at ({new_x:.1f},{new_y:.1f})")
+                    print(
+                        f"    SUCCESS: Added point {len(points)} at ({new_x:.1f},{new_y:.1f})"
+                    )
 
                 # Break if we've reached the target count
                 if len(points) >= total_points:
@@ -186,31 +208,37 @@ def poisson_disk_sampling(
         if not found:
             removed_point = active_points.pop(idx)
             if verbose and iteration <= 10:
-                print(f"    Removed exhausted active point ({removed_point[0]:.1f},{removed_point[1]:.1f})")
+                print(
+                    f"    Removed exhausted active point ({removed_point[0]:.1f},{removed_point[1]:.1f})"
+                )
 
         # Progress logging
         if verbose and iteration % 100 == 0:
-            print(f"  Progress: {len(points)} points, {len(active_points)} active, iteration {iteration}")
+            print(
+                f"  Progress: {len(points)} points, {len(active_points)} active, iteration {iteration}"
+            )
 
     if verbose:
-        print(f"[poisson_disk] Algorithm completed:")
+        print("[poisson_disk] Algorithm completed:")
         print(f"  Final: {len(points)} points in {iteration} iterations")
         print(f"  Active points remaining: {len(active_points)}")
-        print(f"  Termination reason: {'target reached' if len(points) >= total_points else 'no active points' if not active_points else 'iteration limit'}")
+        print(
+            f"  Termination reason: {'target reached' if len(points) >= total_points else 'no active points' if not active_points else 'iteration limit'}"
+        )
 
     return points
 
 
 def generate(
-    canvas_size, 
-    total_points=1000, 
-    seed=0, 
-    input_image=None, 
+    canvas_size,
+    total_points=1000,
+    seed=0,
+    input_image=None,
     min_dist_factor=None,  # Auto-calculate if None
     cascade_fill_enabled=False,
     cascade_intensity=0.8,
     verbose=False,
-    **kwargs
+    **kwargs,
 ):
     """Generate Poisson disk sampling and return shapes for SVG export.
 
@@ -229,14 +257,20 @@ def generate(
         List of circle dictionaries with 'type', 'cx', 'cy', 'r' keys
     """
     if verbose:
-        print(f"[poisson_disk] Poisson disk generation - Cascade: {'ENABLED' if cascade_fill_enabled else 'DISABLED'}")
-        print(f"[poisson_disk] Canvas: {canvas_size[0]}x{canvas_size[1]}, Target: {total_points} points")
-    
+        print(
+            f"[poisson_disk] Poisson disk generation - Cascade: {'ENABLED' if cascade_fill_enabled else 'DISABLED'}"
+        )
+        print(
+            f"[poisson_disk] Canvas: {canvas_size[0]}x{canvas_size[1]}, Target: {total_points} points"
+        )
+
     # Adjust target for cascade mode - more aggressive for higher density
     if cascade_fill_enabled:
         base_target = max(int(total_points * 0.7), 20)  # Increased from 0.6 to 0.7
         if verbose:
-            print(f"[poisson_disk] Cascade mode: generating {base_target} base points, then cascade fill")
+            print(
+                f"[poisson_disk] Cascade mode: generating {base_target} base points, then cascade fill"
+            )
     else:
         base_target = total_points
         if verbose:
@@ -247,16 +281,20 @@ def generate(
         # Use even smaller value to allow more points to fit
         # Smaller spacing = more points can be placed
         min_dist_factor = 0.008  # Reduced from 0.012 for denser packing
-        
+
         if verbose:
-            print(f"[poisson_disk] Using ultra-dense packing min_dist_factor: {min_dist_factor}")
+            print(
+                f"[poisson_disk] Using ultra-dense packing min_dist_factor: {min_dist_factor}"
+            )
     else:
         if verbose:
             print(f"[poisson_disk] Using provided min_dist_factor: {min_dist_factor}")
 
     # Get the base points using ORIGINAL algorithm
     try:
-        points = poisson_disk_sampling(canvas_size, base_target, seed, min_dist_factor, verbose=verbose, **kwargs)
+        points = poisson_disk_sampling(
+            canvas_size, base_target, seed, min_dist_factor, verbose=verbose, **kwargs
+        )
         if verbose:
             print(f"[poisson_disk] Generated {len(points)} Poisson disk points")
     except Exception as e:
@@ -275,29 +313,33 @@ def generate(
     width, height = canvas_size
     diagonal = math.sqrt(width * width + height * height)
     min_dist = diagonal * min_dist_factor
-    
+
     # Use your successful 100% setting for no white space
     point_radius = min_dist * 1.0  # 100% of minimum distance = overlapping circles
-    
+
     # Ensure reasonable minimum radius
     point_radius = max(point_radius, 3.0)
-    
+
     if verbose:
         print(f"[poisson_disk] Min distance: {min_dist:.1f} pixels")
-        print(f"[poisson_disk] Circle radius: {point_radius:.1f} pixels (gap: {min_dist - 2*point_radius:.1f})")
+        print(
+            f"[poisson_disk] Circle radius: {point_radius:.1f} pixels (gap: {min_dist - 2*point_radius:.1f})"
+        )
 
     # Convert points to circle shapes for SVG export
     shapes = []
     for x, y in points:
-        shapes.append({
-            "type": "circle",
-            "cx": float(x),
-            "cy": float(y),
-            "r": float(point_radius),
-            "fill": _sample_image_color(input_image, x, y, width, height),
-            "stroke": "none",
-            "stroke_width": 0,
-        })
+        shapes.append(
+            {
+                "type": "circle",
+                "cx": float(x),
+                "cy": float(y),
+                "r": float(point_radius),
+                "fill": _sample_image_color(input_image, x, y, width, height),
+                "stroke": "none",
+                "stroke_width": 0,
+            }
+        )
 
     if verbose:
         print(f"[poisson_disk] Generated {len(shapes)} base circles")
@@ -305,11 +347,11 @@ def generate(
     # Apply cascade fill if enabled
     if cascade_fill_enabled and len(shapes) < total_points:
         if verbose:
-            print(f"[poisson_disk] Applying cascade fill")
-        
+            print("[poisson_disk] Applying cascade fill")
+
         # Create small circles for cascade filling
         cascade_radius = point_radius * cascade_intensity * 0.4
-        
+
         def generate_cascade_circle() -> Dict:
             radius = random.uniform(cascade_radius * 0.6, cascade_radius * 1.2)
             return {
@@ -321,7 +363,7 @@ def generate(
                 "stroke": "none",
                 "stroke_width": 0,
             }
-        
+
         # Apply universal cascade fill
         enhanced_shapes = apply_universal_cascade_fill(
             shapes=shapes,
@@ -329,26 +371,28 @@ def generate(
             target_count=total_points,
             shape_generator=generate_cascade_circle,
             seed=seed + 1000,
-            verbose=verbose
+            verbose=verbose,
         )
-        
+
         # Update colors for cascade shapes
-        cascade_shapes = enhanced_shapes[len(shapes):]
+        cascade_shapes = enhanced_shapes[len(shapes) :]
         for shape in cascade_shapes:
             if shape.get("type") == "circle":
                 cx = shape.get("cx", 0)
                 cy = shape.get("cy", 0)
                 color = _sample_image_color(input_image, cx, cy, width, height)
                 shape["fill"] = color
-        
+
         shapes = enhanced_shapes
-        
+
         if verbose:
             print(f"[poisson_disk] Cascade fill added {len(cascade_shapes)} circles")
 
     if verbose:
         print(f"[poisson_disk] Final count: {len(shapes)} circles")
-        print(f"[poisson_disk] Mode: {'CASCADE FILL' if cascade_fill_enabled else 'DEFAULT'}")
+        print(
+            f"[poisson_disk] Mode: {'CASCADE FILL' if cascade_fill_enabled else 'DEFAULT'}"
+        )
 
     return shapes
 
