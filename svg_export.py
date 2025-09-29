@@ -86,7 +86,7 @@ def export_svg(shapes, width=800, height=600, background="white"):
             )
             continue
         # generic polygon fallback
-        points_str = " ".join(f"{p[0]},{p[1]}" for p in points)
+        points_str = " ".join(f"{int(p[0])},{int(p[1])}" for p in points)
         svg_parts.append(
             f'<polygon points="{points_str}" fill="{fill_color}" stroke="{stroke_color}" stroke-width="{stroke_width}" opacity="0.7"/>'
         )

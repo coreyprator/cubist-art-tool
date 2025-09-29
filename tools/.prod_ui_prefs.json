@@ -7,6 +7,10 @@
   "verbose_probe": true,
   "auto_open_gallery": true,
   "geoms": [
+    "rectangles",
+    "delaunay",
+    "voronoi",
+    "poisson_disk",
     "scatter_circles"
   ],
   "fill_methods": [

@@ -35,7 +35,7 @@ def generate(
 ) -> List[Dict]:
     """
     Enhanced Delaunay Triangulation with Universal Cascade Fill Integration
-    
+
     Parameters:
     - cascade_fill_enabled: Enable universal cascade fill system (default: False for backward compatibility)
     - cascade_intensity: How aggressively to fill gaps (0.0-1.0, default: 0.8)
@@ -44,11 +44,11 @@ def generate(
     """
     width, height = canvas_size
     rng = random.Random(int(seed))
-    
+
     if verbose:
         print(f"[delaunay] Delaunay generation - Cascade: {'ENABLED' if cascade_fill_enabled else 'DISABLED'}")
         print(f"[delaunay] Canvas: {width}x{height}, Target: {total_points} triangles")
-    
+
     # Phase 1: Generate base triangulation (60-70% of target if cascade enabled)
     if cascade_fill_enabled:
         base_count = max(int(total_points * 0.6), 8)  # 60% for base when cascade enabled
@@ -58,39 +58,39 @@ def generate(
         base_count = total_points  # All triangles in default mode
         if verbose:
             print(f"[delaunay] Default mode: generating {base_count} triangles")
-    
+
     # Generate base triangulation
     base_shapes = _generate_base_triangulation(
         canvas_size, base_count, seed, seed_points, input_image, verbose
     )
-    
+
     if verbose:
         print(f"[delaunay] Generated {len(base_shapes)} base triangles")
-    
+
     # Phase 2: Apply cascade fill if enabled
     final_shapes = base_shapes
-    
+
     if cascade_fill_enabled and len(base_shapes) < total_points:
         if verbose:
             print(f"[delaunay] Applying universal cascade fill (intensity: {cascade_intensity})")
-        
+
         # Calculate average triangle size for cascade reference
         avg_triangle_size = _calculate_average_triangle_size(base_shapes)
         cascade_size = max(min_triangle_size, avg_triangle_size * cascade_intensity * 0.4)
-        
+
         # Create shape generator for cascade triangles
         def generate_cascade_triangle() -> Dict:
             # Generate small equilateral triangle for gap filling
             side_length = rng.uniform(cascade_size * 0.7, cascade_size * 1.3)
             height_tri = side_length * math.sqrt(3) / 2
-            
+
             # Create equilateral triangle at origin - cascade system will position it
             points = [
                 (0.0, 0.0),
                 (side_length, 0.0),
                 (side_length / 2, height_tri),
             ]
-            
+
             return {
                 "type": "polygon",
                 "points": points,
@@ -98,7 +98,7 @@ def generate(
                 "stroke": (0, 0, 0),
                 "stroke_width": 0.3,  # Thinner stroke for cascade triangles
             }
-        
+
         # Apply universal cascade fill
         enhanced_shapes = apply_universal_cascade_fill(
             shapes=base_shapes,
@@ -108,7 +108,7 @@ def generate(
             seed=seed + 1000,  # Different seed for cascade
             verbose=verbose
         )
-        
+
         # Update colors for cascade shapes based on their final positions
         cascade_shapes = enhanced_shapes[len(base_shapes):]
         for shape in cascade_shapes:
@@ -120,29 +120,29 @@ def generate(
                 # Sample color at final position
                 color_rgb = _sample_image_color(input_image, centroid_x, centroid_y, width, height)
                 shape["fill"] = color_rgb
-        
+
         final_shapes = enhanced_shapes
-        
+
         if verbose:
             print(f"[delaunay] Universal cascade fill added {len(cascade_shapes)} triangles")
-    
+
     # Canonicalize final results
     result = _canonicalize_triangles(final_shapes)
-    
+
     # Calculate final statistics
     if verbose:
         total_area = sum(
-            _calculate_triangle_area(shape["points"]) 
-            for shape in result 
+            _calculate_triangle_area(shape["points"])
+            for shape in result
             if shape.get("type") == "polygon" and "points" in shape
         )
         canvas_area = width * height
         coverage = (total_area / canvas_area) * 100
-        
+
         print(f"[delaunay] Final count: {len(result)} triangles")
         print(f"[delaunay] Canvas coverage: {coverage:.1f}%")
         print(f"[delaunay] Mode: {'CASCADE FILL' if cascade_fill_enabled else 'DEFAULT'}")
-    
+
     return result
 
 
@@ -176,10 +176,10 @@ def _generate_base_triangulation(
 
         if verbose:
             print("[delaunay] Using SciPy Delaunay triangulation")
-        
+
         tri = _Delaunay(_np.array(pts, dtype=float))
         shapes: List[Dict] = []
-        
+
         for simplex in tri.simplices:
             p0 = tuple(map(float, tri.points[simplex[0]]))
             p1 = tuple(map(float, tri.points[simplex[1]]))
@@ -198,13 +198,13 @@ def _generate_base_triangulation(
                 "stroke": (0, 0, 0),
                 "stroke_width": 0.5,
             })
-        
+
         return shapes
-        
+
     except Exception as e:
         if verbose:
             print(f"[delaunay] SciPy not available ({e}), using grid fallback")
-        
+
         shapes = _grid_fallback_tris(width, height, rng, input_image)
         return shapes
 
@@ -213,25 +213,25 @@ def _calculate_average_triangle_size(shapes: List[Dict]) -> float:
     """Calculate average triangle size (edge length) from triangles."""
     if not shapes:
         return 10.0  # Default fallback
-    
+
     total_perimeter = 0.0
     count = 0
-    
+
     for shape in shapes:
         if shape.get("type") == "polygon" and "points" in shape:
             points = shape["points"]
             if len(points) >= 3:
                 p1, p2, p3 = points[0], points[1], points[2]
-                
+
                 # Calculate perimeter
                 edge1 = math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
                 edge2 = math.sqrt((p3[0] - p2[0])**2 + (p3[1] - p2[1])**2)
                 edge3 = math.sqrt((p1[0] - p3[0])**2 + (p1[1] - p3[1])**2)
-                
+
                 perimeter = edge1 + edge2 + edge3
                 total_perimeter += perimeter
                 count += 1
-    
+
     if count > 0:
         avg_perimeter = total_perimeter / count
         return avg_perimeter / 3  # Average edge length
@@ -243,7 +243,7 @@ def _calculate_triangle_area(points: List[Tuple[float, float]]) -> float:
     """Calculate area of triangle given three points."""
     if len(points) < 3:
         return 0.0
-    
+
     p1, p2, p3 = points[:3]
     return abs((p1[0]*(p2[1] - p3[1]) + p2[0]*(p3[1] - p1[1]) + p3[0]*(p1[1] - p2[1])) / 2.0)
 

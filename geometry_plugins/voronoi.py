@@ -32,18 +32,18 @@ def generate(
 ) -> List[Dict]:
     """
     Voronoi Diagram with Optional Cascade Fill
-    
+
     Parameters:
     - cascade_fill_enabled: Enable cascade fill system (default: False)
     - cascade_intensity: How aggressively to fill gaps (0.0-1.0, default: 0.8)
     """
     width, height = canvas_size
     rng = random.Random(int(seed))
-    
+
     if verbose:
         print(f"[voronoi] Voronoi generation - Cascade: {'ENABLED' if cascade_fill_enabled else 'DISABLED'}")
         print(f"[voronoi] Canvas: {width}x{height}, Target: {total_points} cells")
-    
+
     # Determine how many base Voronoi cells to generate
     if cascade_fill_enabled:
         base_count = max(int(total_points * 0.6), 8)  # 60% for base when cascade enabled
@@ -53,7 +53,7 @@ def generate(
         base_count = total_points  # All cells in default mode
         if verbose:
             print(f"[voronoi] Default mode: generating {base_count} cells")
-    
+
     # Generate seed points
     if seed_points and len(seed_points) >= 3:
         pts = [tuple(map(float, pt)) for pt in seed_points]
@@ -66,7 +66,7 @@ def generate(
         ]
         if verbose:
             print(f"[voronoi] Generated {len(pts)} random seed points")
-    
+
     # Generate base Voronoi diagram (using your working original code)
     base_shapes = []
     try:
@@ -75,10 +75,10 @@ def generate(
 
         if verbose:
             print("[voronoi] Using SciPy Voronoi diagram")
-        
+
         v = _Voronoi(_np.array(pts, dtype=float))
         regions = _voronoi_finite_polygons_2d(v)
-        
+
         for region, site_idx in regions:
             poly = _clip_poly_to_bbox(region, (0.0, 0.0, float(width), float(height)))
             if len(poly) >= 3:
@@ -95,14 +95,14 @@ def generate(
                     "stroke": "none",
                     "stroke_width": 0,
                 })
-        
+
         if verbose:
             print(f"[voronoi] Generated {len(base_shapes)} Voronoi polygons")
-            
+
     except Exception as e:
         if verbose:
             print(f"[voronoi] SciPy Voronoi failed ({e}), using circle fallback")
-        
+
         # Fallback to circles only if Voronoi completely fails
         radius = max(1.0, 0.0075 * min(width, height))
         base_shapes = [
@@ -122,13 +122,13 @@ def generate(
 
     # Apply cascade fill if enabled and we successfully generated polygons
     final_shapes = base_shapes
-    
-    if (cascade_fill_enabled and len(base_shapes) < total_points and 
+
+    if (cascade_fill_enabled and len(base_shapes) < total_points and
         base_shapes and base_shapes[0].get("type") == "polygon"):
-        
+
         if verbose:
             print(f"[voronoi] Applying cascade fill to Voronoi polygons")
-        
+
         # Create simple square shapes for cascade filling
         def generate_cascade_cell() -> Dict:
             size = rng.uniform(8, 20)  # Small squares
@@ -139,7 +139,7 @@ def generate(
                 "stroke": "none",
                 "stroke_width": 0,
             }
-        
+
         # Apply universal cascade fill
         enhanced_shapes = apply_universal_cascade_fill(
             shapes=base_shapes,
@@ -149,7 +149,7 @@ def generate(
             seed=seed + 1000,
             verbose=verbose
         )
-        
+
         # Update colors for cascade shapes
         cascade_shapes = enhanced_shapes[len(base_shapes):]
         for shape in cascade_shapes:
@@ -159,9 +159,9 @@ def generate(
                 centroid_y = sum(p[1] for p in points) / len(points)
                 color = _sample_image_color(input_image, centroid_x, centroid_y, width, height)
                 shape["fill"] = color
-        
+
         final_shapes = enhanced_shapes
-        
+
         if verbose:
             print(f"[voronoi] Cascade fill added {len(cascade_shapes)} shapes")
     elif cascade_fill_enabled and base_shapes and base_shapes[0].get("type") == "circle":
@@ -170,7 +170,7 @@ def generate(
     elif cascade_fill_enabled:
         if verbose:
             print(f"[voronoi] Cascade fill skipped - target already reached or no shapes")
-    
+
     # Sort results (using your original working sort)
     if final_shapes:
         def vkey(s):
@@ -184,18 +184,18 @@ def generate(
             return (0, 0)
 
         final_shapes = sorted(final_shapes, key=vkey)
-    
+
     if verbose:
         shape_types = {}
         for shape in final_shapes:
             shape_type = shape.get("type", "unknown")
             shape_types[shape_type] = shape_types.get(shape_type, 0) + 1
-        
+
         print(f"[voronoi] Final count: {len(final_shapes)} shapes")
         for shape_type, count in shape_types.items():
             print(f"[voronoi]   {count} {shape_type}s")
         print(f"[voronoi] Mode: {'CASCADE FILL' if cascade_fill_enabled else 'DEFAULT'}")
-    
+
     return final_shapes
 
 

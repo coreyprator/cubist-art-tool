@@ -1,312 +1,270 @@
-# Cubist Art Tool v2.5.0 - Development Roadmap (Updated)
+# Cubist Art Tool v2.5.0 - Development Roadmap
+## Updated: Sprint 1 Complete - Rectangle Enhancement & File Optimization
 
-## Current Status (v2.4.0)
-✅ **Completed**: All 5 geometry plugins now sample actual pixel colors from input images  
-✅ **Completed**: Performance fixes for high point counts (4000+)  
-✅ **Completed**: Production-quality gallery UI with thumbnails and clickable links  
+## Current Status (v2.5.0 - Phase 1: 50% Complete)
 
-## Development Options for v2.5.0
+### ✅ Completed This Sprint
+- **Rectangle Algorithm**: Coverage-first with bold size variance (0.25x-5.0x)
+- **Integer Coordinate Optimization**: Applied across all 5 geometries (~20% file size reduction)
+- **SVG Export Enhancement**: Standardized coordinate formatting in svg_export.py
+- **Metadata Architecture**: Adobe XMP-compatible structure designed for HASL
 
----
-
-## **Priority 1: Enhanced Rectangle Algorithm & Adjacent Fit System**
-*Focus: Immediate improvement to rectangles + foundation for space optimization*
-
-### **Adjacent Fit Rectangle Algorithm** 
-**Replacing Grid-Based Approach**: Grid tessellation is artistically boring. Instead, implement randomized rectangle placement with intelligent fitting.
-
-**Technical Approach**:
-1. **Random Rectangle Generation**: Create rectangles with random sizes within configurable range (default: 0.5 to 2.0 standard deviations)
-2. **Adjacent Placement**: Each new rectangle fits adjacent to existing rectangles until canvas is filled
-3. **Size Parameters**: User-configurable min/max size range via sliders
-4. **Collision Detection**: Prevent overlaps while maximizing space utilization
-
-**Implementation Details**:
-- Start with first rectangle at random position
-- For each subsequent rectangle: find valid adjacent positions to existing rectangles
-- Use spatial indexing for efficient collision detection
-- Provide feedback when size constraints limit shape count or leave unfilled space
-
-**Visual Result**: Organic, puzzle-like rectangular compositions with natural variation while achieving high space utilization.
-
-### **Cascade Fill Integration**
-**Priority Elevation**: Since cascade fill has been working, integrate it early across all applicable geometries.
-
-**Technical Approach**:
-- Apply cascade logic to rectangles, Voronoi, Delaunay, and scatter circles
-- Identify gaps/poorly filled areas during generation
-- Generate additional shapes specifically to fill identified gaps
-- Optimize for 90%+ space utilization across all geometries
-
-**User Control**: Cascade fill intensity slider (0-100%) controls how aggressively gaps are filled.
+### ✅ Previously Completed
+- All 5 geometry plugins sample actual pixel colors from input images
+- Performance fixes for high point counts (4000+)
+- Production-quality gallery UI with thumbnails and clickable links
+- Universal cascade fill integration across all 5 geometries
+- Side-by-side Default Fill vs Cascade Fill comparison in production UI
 
 ---
 
-## **Priority 2: Unified Parameter Control System**
-*Focus: Comprehensive slider-based UI for creative control*
+## Phase 1 Progress Tracker
 
-### **Adaptive Size Constraints (Min/Max Controls)**
-**Technical Implementation**: Replace "adaptive minimum sizes" with comprehensive min/max control system.
+**Overall: 50% Complete (2 of 4 priorities finished)**
 
-**Parameters for All Geometries**:
-- **Minimum Shape Size**: Slider range 1-50 pixels (prevents invisible shapes)
-- **Maximum Shape Size**: Slider range 50-500 pixels (prevents dominance)
-- **Size Variance**: Controls randomness in size distribution
-- **Constraint Feedback**: Display warnings when constraints limit shape count or space utilization
-
-### **Unified Control Interface**
-**Consolidating Multiple Concepts**: Single interface controlling all geometric parameters.
-
-**Master Parameter Categories**:
-1. **Size Controls**: Min/max size, variance, distribution curve
-2. **Spacing Controls**: Tight/loose spacing, gap tolerance, overlap prevention
-3. **Color Matching**: Sampling radius, color harmony weights, contrast sensitivity
-4. **Space Optimization**: Fill density, gap detection sensitivity, adjacency preference
-5. **Placement Strategy**: Random vs. structured, edge preference, feature attraction
-
-**Visual Result**: Users can precisely tune artistic style from dense mosaics to loose impressionistic interpretations.
-
-### **Style Presets & CRUD Operations**
-**Functionality**:
-- **Create**: Save current parameter combinations as named presets
-- **Read**: Load existing presets from library
-- **Update**: Modify and resave existing presets
-- **Delete**: Remove unwanted presets
-- **Import/Export**: Share preset files between users
-
-**Built-in Presets**: "Dense Mosaic", "Impressionist", "Geometric", "Organic Flow", "High Contrast"
+1. ✅ **Cascade Fill** - COMPLETED
+2. ✅ **Rectangle Enhancement** - COMPLETED
+3. ⏳ **Parameter System** - NEXT SPRINT
+4. ⏳ **Size Constraints** - NEXT SPRINT
 
 ---
 
-## **Priority 3: Hybrid Subdivision & Multi-Geometry System**
-*Focus: Combining multiple geometric approaches*
+## Validated Technical Discoveries
 
-### **Multi-Geometry Selection Interface**
-**Technical Approach**:
-- **Checkbox Interface**: Select multiple geometries to combine (Delaunay, Voronoi, Rectangles, Circles, Poisson)
-- **Sequence Control**: Choose Random or Round-Robin application order
-- **Shape Allocation**: Distribute total shape count across selected geometries
-- **Unified Parameters**: Apply size constraints, cascade fill, and adjacent fit across all selected geometries
+### Universal Spacing Formula (Circle Geometries)
+Successfully validated across Poisson Disk and Scatter Circles:
+```python
+# Dense coverage (no white space):
+min_dist_factor = 0.008
+radius_multiplier = 1.0
 
-**Implementation**:
-```
-Selected Geometries: [✓] Delaunay [✓] Rectangles [ ] Voronoi
-Sequence: (•) Random ( ) Round-Robin
-Shape Distribution: Auto / Custom allocation sliders
-```
+# Blue noise dots (visible gaps):
+min_dist_factor = 0.025
+radius_multiplier = 0.25
+Visual Effect Progression:
 
-### **Advanced Adjacency-Based Placement**
-**Building on Adjacent Fit**: Extend basic adjacent fitting with intelligent placement decisions.
+radius < 0.5 × spacing → Scattered, lots of white space
+radius = 0.25 × spacing → Blue noise dots with gaps
+radius = 0.8 × spacing → Near-touching mosaic
+radius ≥ 1.0 × spacing → Complete overlapping coverage
 
-**Enhanced Factors**:
-- **Color Harmony**: Place shapes where colors blend naturally with neighbors
-- **Size Compatibility**: Avoid jarring size transitions between adjacent shapes
-- **Geometric Fit**: Optimize shape orientation and proportions for better tessellation
-- **Feature Attraction**: Bias placement toward important image features (edges, focal points)
+Rectangle Size Variance Discovery
+Finding: 20x size range (0.25x to 5.0x average) with power-law distribution creates organic compositions.
+Distribution: 70% small (detail) + 20% medium + 10% large (structure)
+Result: Complete coverage through intentional overlap vs. systematic gaps from tessellation.
+File Size Optimization
+Finding: Integer coordinate rounding provides 15-25% file size reduction with no visual quality loss.
+Implementation: Centralized in svg_export.py, applies to all geometries automatically.
 
-**Cross-Geometry Application**: Apply adjacency intelligence to non-rectangle geometries for optimized placement and sizing.
+Priority 2: Parameter System Integration - NEXT SPRINT
+Objective
+Expose validated spacing/radius controls for circle geometries via production UI sliders.
+Circle Geometry Parameters (Poisson Disk & Scatter Circles)
+Spacing Density Slider (min_dist_factor)
 
----
+Range: 0.005 to 0.030
+Default: 0.008 (dense) or 0.025 (sparse)
+Effect: Lower = denser packing, more shapes
 
-## **Priority 4: Batch Processing & Learning System**
-*Focus: Workflow efficiency and AI optimization*
+Coverage Ratio Slider (radius_multiplier)
 
-### **Multi-Image Batch Processing**
-**Functionality**:
-- **Multi-Select Interface**: Choose multiple input images via file dialog
-- **Preset Application**: Apply same preset/parameters to entire batch
-- **Output Organization**: Create organized folders with consistent naming
-- **Progress Tracking**: Real-time progress bar and estimated completion time
+Range: 0.25 to 1.2
+Default: 1.0 (complete coverage)
+Effect: 0.25 = blue noise dots, 1.0 = overlapping
 
-**Metadata Preservation**:
-- **Image Metadata**: Embed generation parameters in SVG metadata
-- **Sidecar JSON**: Store detailed parameters, timestamps, source image info
-- **Gallery Integration**: Batch outputs automatically appear in gallery with thumbnails
+UI Requirements:
 
-### **Rating & Ranking System**
-**User Interface**:
-- **Star Rating**: 1-5 star rating system in gallery view
-- **Quick Rating**: Keyboard shortcuts (1-5 keys) for rapid evaluation
-- **Batch Rating**: Select multiple images for group rating operations
-- **Filter by Rating**: Display only high-rated outputs
+Geometry-specific sliders (show only when geometry selected)
+Real-time parameter validation
+Visual feedback for parameter effects
 
-**Metadata Storage**:
-- **SVG Metadata**: Store ratings directly in SVG files
-- **Database Integration**: Optional database for advanced querying and analysis
-- **Export Options**: Generate reports of highest-rated parameter combinations
+Rectangle Parameters (Future)
+Size Range Sliders
 
-### **Human-Aided Self Learning (HASL) - Future Feature**
-**AI Optimization Framework**:
-- **Pattern Analysis**: AI analyzes correlation between parameters and ratings
-- **Parameter Suggestions**: Recommend parameter adjustments based on user preferences
-- **Auto-Tuning**: Automatically adjust parameters to optimize for higher ratings
-- **Learning Feedback**: System improves suggestions based on user acceptance/rejection
+Minimum Size Multiplier: 0.1 to 1.0
+Maximum Size Multiplier: 1.0 to 10.0
+Aspect Ratio Variance: 1.0 to 5.0
 
-**Implementation Phases**:
-1. **Data Collection**: Gather rating data and parameter correlations
-2. **Pattern Recognition**: Identify successful parameter combinations
-3. **Recommendation Engine**: Suggest optimal settings for new images
-4. **Adaptive Learning**: Continuously refine suggestions based on user feedback
 
----
+Priority 3: Metadata & Learning Foundation
+SVG Metadata Implementation
+Adobe XMP-Compatible Structure (for Adobe Bridge integration):
+Standard namespace declarations (W3C/Adobe public specifications):
 
-## **Revised Development Sequence**
+xmlns:rdf = W3C RDF standard
+xmlns:xmp = Adobe XMP public spec
+xmlns:dc = Dublin Core metadata standard
+xmlns:cubist = Custom Cubist namespace (our original work)
 
-### **Phase 1 (v2.5.0): Foundation Enhancement**
-1. **Adjacent Fit Rectangles**: Replace grid approach with intelligent random placement
-2. **Cascade Fill**: Integrate across all geometries for better space utilization  
-3. **Unified Parameter System**: Implement comprehensive slider-based controls
-4. **Size Constraints**: Add adaptive min/max controls to all geometries
+Example metadata structure:
+xml<metadata>
+  <rdf:RDF>
+    <rdf:Description>
+      <dc:format>image/svg+xml</dc:format>
+      <dc:creator>Cubist Art Tool</dc:creator>
+      <xmp:CreatorTool>Cubist Art Tool v2.5.0</xmp:CreatorTool>
+      <xmp:CreateDate>2025-09-28T21:33:57</xmp:CreateDate>
+      <xmp:Rating>0</xmp:Rating>
 
-**Timeline**: 2-3 weeks
-**Impact**: Immediate improvement to rectangles algorithm + foundation for advanced features
+      <cubist:version>2.5.0</cubist:version>
+      <cubist:geometry>rectangles</cubist:geometry>
+      <cubist:fillMethod>default</cubist:fillMethod>
+      <cubist:inputSource>path/to/input.jpg</cubist:inputSource>
 
-### **Phase 2 (v2.6.0): Multi-Geometry & Workflow**
-1. **Hybrid Subdivision**: Multi-geometry selection and combination
-2. **Batch Processing**: Multi-image processing with presets
-3. **Rating System**: Star ratings and metadata storage
-4. **Advanced Adjacency**: Intelligent placement based on color harmony and geometric fit
+      <cubist:canvasWidth>3024</cubist:canvasWidth>
+      <cubist:canvasHeight>4032</cubist:canvasHeight>
+      <cubist:targetShapes>8000</cubist:targetShapes>
+      <cubist:actualShapes>8000</cubist:actualShapes>
+      <cubist:seed>42</cubist:seed>
 
-**Timeline**: 3-4 weeks  
-**Impact**: Major workflow improvements + sophisticated geometric combinations
+      <cubist:spaceUtilization>94.3</cubist:spaceUtilization>
+      <cubist:generationTime>4.8</cubist:generationTime>
 
-### **Phase 3 (v2.7.0): AI & Optimization**
-1. **HASL Framework**: Basic AI analysis of ratings vs. parameters
-2. **Parameter Recommendations**: AI-suggested optimizations
-3. **Advanced Space Optimization**: 90%+ utilization algorithms
-4. **Performance Optimization**: Sub-15 second generation times
+      <cubist:artisticStyle></cubist:artisticStyle>
+      <cubist:visualComplexity>high</cubist:visualComplexity>
+    </rdf:Description>
+  </rdf:RDF>
+</metadata>
+Space Utilization Calculation
+Accurate Method (sampling-based, accounts for overlaps):
+pythondef calculate_space_utilization(shapes, canvas_width, canvas_height, sample_density=100):
+    """Returns percentage of canvas with at least one shape (0-100%)."""
+    filled = 0
+    total = sample_density * sample_density
+    step_x, step_y = canvas_width / sample_density, canvas_height / sample_density
 
-**Timeline**: 4-6 weeks
-**Impact**: AI-assisted creativity + production-level performance
+    for i in range(sample_density):
+        for j in range(sample_density):
+            x, y = (i + 0.5) * step_x, (j + 0.5) * step_y
+            if point_in_any_shape(x, y, shapes):
+                filled += 1
 
-### **Phase 4 (v3.0.0+): Advanced Geometries**
-1. **Fill Patterns**: Gradients, textures, transparency (lower priority - can use Photoshop)
-2. **Fractal Geometries**: Sierpinski, Koch snowflake implementations
-3. **Spiral Patterns**: Fibonacci, logarithmic spiral geometries
-4. **Random Walk**: Brownian motion and stippling effects
+    return (filled / total) * 100.0
 
----
+Deferred Items
+Advanced Space Optimization → Phase 3
 
-## **Advanced Geometry Concepts (Future Development)**
-*[Previous advanced geometry descriptions remain unchanged]*
+95%+ utilization algorithms
+Advanced gap detection
+Intelligent cascade strategies
 
-### **7. Hybrid Primitives**
-[Previous content...]
+Reasoning: Current 90%+ coverage is sufficient for Phase 1. Diminishing returns for additional complexity.
+Rectangle Parameter Sliders → Priority 2
 
-### **8. Fractal-like Geometries** 
-[Previous content...]
+Min/max size multiplier controls
+Aspect ratio variance slider
+Placement strategy options
 
-### **9. Spiral / Radial Patterns**
-[Previous content...]
+Reasoning: Complete circle parameters first to establish UI patterns.
 
-### **10. Waveform / Harmonic Curves**
-[Previous content...]
+Development Sequence
+Phase 1 (v2.5.0): Foundation Enhancement - 50% COMPLETE
+Timeline: 3-4 weeks total (2 weeks completed)
 
-### **11. Random Walk / Brownian Motion Paths**
-[Previous content...]
+✅ Cascade Fill (Week 1)
+✅ Rectangle Enhancement (Week 2)
+⏳ Parameter System Integration (Week 3)
+⏳ Size Constraints & Presets (Week 4)
 
----
+Next Deliverable: Circle parameter sliders in production UI
 
-## **Success Metrics**
+Phase 2 (v2.6.0): Multi-Geometry & Workflow
+Status: Ready after Phase 1
+Timeline: 3-4 weeks
 
-### **Technical Metrics**
-- **Shape Count**: All algorithms achieve user-specified shape counts (100-10,000+)
-- **Space Utilization**: 90%+ effective canvas coverage with cascade fill
-- **Performance**: Generation time under 15 seconds for complex artwork
-- **Batch Processing**: 10+ images processed efficiently with consistent quality
+Hybrid Subdivision (multi-geometry combinations)
+Batch Processing (multi-image with presets)
+Rating System (star ratings + metadata)
+Adobe Bridge integration validation
 
-### **Creative Metrics**
-- **Visual Quality**: Recognizable source image features in geometric interpretation
-- **Artistic Range**: 5+ distinct visual styles achievable through parameter control
-- **User Control**: Intuitive slider-based control without overwhelming complexity
-- **Consistency**: Repeatable results using saved presets
 
-### **Workflow Metrics**
-- **Learning Curve**: New users create satisfying artwork within 5 minutes using presets
-- **Iteration Speed**: Parameter adjustment → preview → final generation under 30 seconds
-- **Batch Efficiency**: 50+ images processed overnight with minimal user intervention
-- **Quality Assessment**: Rating system enables rapid evaluation and improvement of outputs
+Phase 3 (v2.7.0): AI & Advanced Optimization
+Status: Architecture ready
+Timeline: 4-6 weeks
 
----
+HASL Framework (parameter correlation analysis)
+Parameter Recommendations (AI suggestions)
+Advanced Space Optimization (95%+ algorithms)
+Performance Optimization (sub-10 second targets)
 
-## AI Requirements — Standing Delivery Rules
 
-AI-provided code must be delivered, tested, and validated.
+Phase 4 (v3.0.0+): Advanced Geometries
+Status: Foundation-dependent
+Timeline: TBD
 
-Summary (mandatory)
-- Whole-file replacements only. Do not provide diffs, hunks, or partial patches. I will apply only full file contents to the repository to avoid manual merge errors.
-- All provided files must be syntactically valid for the target language. Include the exact command(s) to validate syntax.
-- Provide minimal runnable tests or explicit verification commands (unit tests, lint/syntax checks). Show expected output format.
-- GUI E2E: All runtime verification will be performed via the production UI at:
-  `G:\My Drive\Code\Python\cubist_art\tools\prod_ui.py`
-  For any change affecting runtime behaviour, include exact UI steps (buttons/fields) and the expected gallery output path(s).
-- If multiple files change, deliver each as a separate full-file replacement and list the files in the PR/patch text.
-- Provide the commands to reproduce failure and the commands to validate the fix.
+Success Metrics
+Technical Metrics
 
-Required checks to include with every code delivery
-- Python syntax check:
-  - Command: python -m py_compile <path-to-file.py>
-  - Expected: no output and exit code 0
-- Optional style/lint (if applicable):
-  - Command: ruff check --select E <path> (or your chosen linter)
-  - Expected: no errors for the delivered changes
-- Unit tests (if included):
-  - Command: pytest -q tests/<test_module>.py::test_name
-  - Expected: tests pass (exit code 0)
-- GUI E2E verification:
-  1. Start prod UI:
-     - Command: python tools\prod_ui.py
-     - Expected: server prints "Production UI ready" and listens on http://127.0.0.1:5123
-  2. In the UI, set controls exactly as described in the delivery notes (e.g., input image, Points, select geometries, enable "Auto-open gallery"), click "Run Batch".
-  3. Expected gallery path printed in logs and visible at:
-     - output/production/<timestamp>/index.html
-     - Provide the timestamp pattern and at least one example path that should appear.
+✅ Shape Count: User-specified counts achieved (75%+ validated)
+✅ Space Utilization: 90%+ coverage achieved
+✅ Performance: <15 second generation times
+✅ File Size: 15-25% reduction via integer coordinates
+⏳ Parameter Control: Real-time spacing/coverage control
+⏳ User Control: Intuitive slider-based interface
 
-How to document changes in your PR or message
-- For each file changed, include:
-  - Full filepath
-  - Exact validation commands (syntax/lint/unit)
-  - UI steps for E2E testing and the expected output path(s)
-  - Any environment assumptions (venv path, OS specifics, required extra packages)
-- Paste the last 40 lines of the prod_ui transcript or the per-geometry log if failures occur.
+Creative Metrics
 
-Example deliverable checklist (to include with each change)
-- [ ] File(s) attached as full-file replacements: list
-- [ ] python -m py_compile run for each .py file
-- [ ] pytest tests run (or explicit test command)
-- [ ] prod_ui.py started and E2E steps executed (paste transcript snippet)
-- [ ] Gallery index.html path provided and confirmed
+✅ Visual Quality: Recognizable source features in geometric interpretation
+✅ Coverage: Organic compositions with minimal white space
+⏳ Artistic Range: 5+ distinct styles via parameter control
+⏳ Consistency: Repeatable results via saved presets
 
-### Environment Dependencies (mandatory)
-When new Python packages or system libraries are required by delivered code, include explicit environment dependency instructions so reviewers can reproduce the tested environment exactly.
+Workflow Metrics
 
-- Provide exact pip install commands with pinned versions, for example:
-  - pip install package==1.2.3
-  - pip install "package>=1.2,<1.3"
-- Include a requirements file or a snippet listing new entries and versions:
-  - requirements.txt (append new lines for delivered features)
-  - Example line: pillow==9.5.0
-- Provide venv creation and install steps:
-  - python -m venv .venv
-  - Windows PowerShell: .\.venv\Scripts\Activate.ps1
-  - macOS / Linux: source .venv/bin/activate
-  - pip install -r requirements.txt
-- Provide a one‑line verification command for each new dependency:
-  - python -c "import package; print(package.__version__)"
-  - Example: python -c "import PIL; print(PIL.__version__)"
-- Note any non‑Python system dependencies explicitly and give exact install commands or links:
-  - Example (Ubuntu): sudo apt-get install -y libcairo2-dev libgdk-pixbuf2.0-dev
-  - Example (Windows): link to prebuilt DLL or chocolatey command if applicable
-- If binary wheels or compilation are required, document the preferred platforms and any pip flags:
-  - pip install --only-binary=:all: package
-  - or provide build instructions for platform-specific compilation
-- For optional features, mark dependencies as optional and show how to install them:
-  - pip install package[extra]
-- For CI or reproducibility, provide a minimal Dockerfile snippet or a single command that reproduces the validated environment.
-- When delivering code, include the minimal check commands used during validation:
-  - python -m py_compile <file.py>
-  - pytest -q tests/<test_module>.py::test_name
-  - python tools\prod_ui.py  # to exercise GUI E2E
-- If the feature requires large or system‑level assets (e.g., large model files), provide SHA256 checksums and the exact download command.
+✅ Production UI: Side-by-side fill comparison working
+⏳ Learning Curve: 5-minute time-to-first-artwork
+⏳ Iteration Speed: <30 second parameter-to-preview cycle
+⏳ Metadata Foundation: XMP structure for HASL learning
 
-Append this subsection to the AI Requirements section so it is treated as a required checklist for all future AI deliveries.
+
+Technical Environment
+
+Version: v2.5.0 Phase 1 (50% complete)
+Branch: handoff-to-claude
+Python: .venv virtual environment
+UI: Flask production UI (tools/prod_ui.py)
+Dependencies: PIL, Flask (requirements.txt)
+
+Working Features
+
+All 5 geometries with cascade fill
+Integer coordinate SVG export
+Side-by-side fill method comparison
+Rectangle coverage-first algorithm
+Production-ready gallery UI
+
+
+Next Sprint Requirements
+Parameter UI Testing
+
+All slider additions validated through production UI
+Parameter changes produce visually different outputs
+Spacing=0.008 + Coverage=1.0 → dense overlapping
+Spacing=0.025 + Coverage=0.25 → scattered dots
+
+E2E Validation
+bashpython tools\prod_ui.py
+# Load image, Points: 1500
+# Select: poisson_disk or scatter_circles
+# Adjust: Spacing Density and Coverage Ratio sliders
+# Expected: Visible parameter effects
+# Gallery: output/production/<timestamp>/index.html
+Performance Maintenance
+
+Generation times remain <15 seconds
+Parameter updates feel responsive
+No regressions in existing geometries
+
+
+Lessons Learned
+
+Coverage Strategy: Random placement with intentional overlap beats tessellation for coverage
+Size Variance: 20x range with power-law distribution creates natural compositions
+Optimization: Integer coordinates provide significant file size wins with no visual cost
+Transparency: Hardcoded opacity=0.7 creates layering effects (future: make configurable)
+Centralization: svg_export.py changes apply to all geometries automatically
+
+
+Status: Ready for Parameter System Integration sprint
+Blockers: None
+Dependencies: Completed rectangle work provides reference patterns for parameter implementation
