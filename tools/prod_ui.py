@@ -1,21 +1,36 @@
-# tools/prod_ui.py - Side-by-Side Fill Methods + Fixed SVG Thumbnails
+# tools/prod_ui.py - Phase 2: Dynamic Parameter UI with Metadata Display
 from __future__ import annotations
 
 import json
 import logging
 import queue
-import re
 import shutil
 import subprocess
 import threading
 import time
 import webbrowser
-import io
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from flask import Flask, jsonify, render_template_string, request, send_file, Response
+
+# Import parameter registry
+GEOMETRY_PARAMETERS = {}
+get_factory_defaults = None
+
+try:
+    import sys
+    root_path = Path(__file__).resolve().parents[1]
+    if str(root_path) not in sys.path:
+        sys.path.insert(0, str(root_path))
+    from geometry_parameters import GEOMETRY_PARAMETERS, get_factory_defaults
+    print(f"[prod_ui] Successfully loaded {len(GEOMETRY_PARAMETERS)} geometry parameter definitions")
+except ImportError as e:
+    print(f"[prod_ui] WARNING: Could not import geometry_parameters: {e}")
+    print(f"[prod_ui] Using empty parameter definitions")
+    def get_factory_defaults(geometry):
+        return {}
 
 # Add missing imports
 try:
@@ -109,6 +124,11 @@ def _load_prefs() -> Dict[str, Any]:
     if not default_input:
         default_input = str((ROOT / "input" / "your_input_image.jpg").resolve())
 
+    # Initialize with factory defaults for all geometries
+    geom_params = {}
+    for geom in GEOMS:
+        geom_params[geom] = get_factory_defaults(geom)
+
     return {
         "input_image": default_input,
         "points": 500,
@@ -118,7 +138,8 @@ def _load_prefs() -> Dict[str, Any]:
         "verbose_probe": True,
         "auto_open_gallery": True,
         "geoms": GEOMS[:3],
-        "fill_methods": ["default"],  # Changed to array
+        "fill_methods": ["default"],
+        "geometry_parameters": geom_params,
     }
 
 
@@ -134,9 +155,10 @@ def _run_single_geometry(
     points: int,
     seed: int,
     fill_method: str = "default",
+    geometry_params: Dict[str, float] = None,
     verbose: bool = False,
-) -> Tuple[bool, str]:
-    """Run a single geometry with fill method support"""
+) -> Tuple[bool, str, Dict[str, float]]:
+    """Run a single geometry with fill method and parameter support"""
 
     # Use different output paths for different fill methods
     method_suffix = "_cascade" if fill_method == "cascade" else "_default"
@@ -167,9 +189,15 @@ def _run_single_geometry(
     # Add fill method parameters
     if fill_method == "cascade":
         cmd.extend(["--param", "cascade_fill_enabled=true"])
-        cmd.extend(["--param", "cascade_intensity=0.8"])
     else:
         cmd.extend(["--param", "cascade_fill_enabled=false"])
+
+    # Add geometry-specific parameters
+    if geometry_params:
+        for param_name, param_value in geometry_params.items():
+            cmd.extend(["--param", f"{param_name}={param_value}"])
+            if verbose:
+                _log(f"  → {param_name}={param_value}")
 
     if verbose:
         cmd.append("--verbose")
@@ -216,7 +244,7 @@ def _run_single_geometry(
                 f"✓ {geom} ({fill_method}): {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)",
                 "success",
             )
-            return True, f"✓ {geom} ({fill_method}): {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)"
+            return True, f"✓ {geom} ({fill_method}): {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)", geometry_params or {}
         else:
             error_msg = result.stderr.strip() if result.stderr else "Unknown error"
             _log(
@@ -224,14 +252,14 @@ def _run_single_geometry(
                 "error",
             )
             _log(f"  Error: {error_msg}", "error")
-            return False, f"✗ {geom} ({fill_method}): failed - {error_msg}"
+            return False, f"✗ {geom} ({fill_method}): failed - {error_msg}", geometry_params or {}
 
     except subprocess.TimeoutExpired:
         _log(f"✗ {geom} ({fill_method}): timed out after 5 minutes", "error")
-        return False, f"✗ {geom} ({fill_method}): timed out"
+        return False, f"✗ {geom} ({fill_method}): timed out", geometry_params or {}
     except Exception as e:
         _log(f"✗ {geom} ({fill_method}): exception - {e}", "error")
-        return False, f"✗ {geom} ({fill_method}): {e}"
+        return False, f"✗ {geom} ({fill_method}): {e}", geometry_params or {}
 
 
 def _run_batch(
@@ -240,10 +268,11 @@ def _run_batch(
     points: int,
     seed: int,
     fill_methods: List[str],
+    geometry_parameters: Dict[str, Dict[str, float]],
     auto_open: bool,
     verbose: bool = False,
 ) -> None:
-    """Enhanced batch runner with multiple fill methods"""
+    """Enhanced batch runner with parameter support"""
     global BUSY
     try:
         BUSY = True
@@ -270,11 +299,16 @@ def _run_batch(
         total_combinations = len(geoms) * len(fill_methods)
 
         for geom in geoms:
+            geom_params = geometry_parameters.get(geom, {})
+            if geom_params and verbose:
+                _log(f"Parameters for {geom}:")
+            
             for fill_method in fill_methods:
-                success, msg = _run_single_geometry(
-                    geom, str(resolved_input), output_dir, points, seed, fill_method, verbose
+                success, msg, params = _run_single_geometry(
+                    geom, str(resolved_input), output_dir, points, seed, 
+                    fill_method, geom_params, verbose
                 )
-                results.append((geom, success, msg, fill_method))
+                results.append((geom, success, msg, fill_method, params))
                 if success:
                     successful += 1
 
@@ -283,14 +317,14 @@ def _run_batch(
 
         failed = total_combinations - successful
         if failed == 0:
-            _log(f"🎉 All {total_combinations} combinations completed successfully!", "complete")
+            _log(f"All {total_combinations} combinations completed successfully!", "complete")
         elif successful > 0:
             _log(
-                f"⚠ Batch complete: {successful}/{total_combinations} successful, {failed} failed",
+                f"Batch complete: {successful}/{total_combinations} successful, {failed} failed",
                 "warning",
             )
         else:
-            _log(f"⚠ Batch failed: 0/{total_combinations} successful", "error")
+            _log(f"Batch failed: 0/{total_combinations} successful", "error")
 
         _log(f"Wrote comparison gallery -> {output_dir}/index.html")
 
@@ -300,20 +334,50 @@ def _run_batch(
             webbrowser.open(f"file:///{gallery_path}")
             _log("Gallery opened. Look for new browser tab!", "success")
 
-        _log("🎯 Batch complete", "complete")
+        _log("Batch complete", "complete")
     except Exception as e:
-        _log(f"⚠ Batch failed with exception: {e}", "error")
+        _log(f"Batch failed with exception: {e}", "error")
     finally:
         BUSY = False
 
 
+def _extract_svg_metadata(svg_path: Path) -> Dict[str, str]:
+    """Extract XMP metadata from SVG file."""
+    try:
+        if not svg_path.exists():
+            return {}
+        
+        content = svg_path.read_text(encoding='utf-8')
+        metadata = {}
+        
+        # Simple regex extraction of key metadata fields
+        import re
+        
+        patterns = {
+            'generation_time': r'<cubist:generationTime>([\d.]+)</cubist:generationTime>',
+            'actual_shapes': r'<cubist:actualShapes>(\d+)</cubist:actualShapes>',
+            'space_utilization': r'<cubist:spaceUtilization>([\d.]+)</cubist:spaceUtilization>',
+            'create_date': r'<xmp:CreateDate>([^<]+)</xmp:CreateDate>',
+            'average_shape_area': r'<cubist:averageShapeArea>(\d+)</cubist:averageShapeArea>',
+        }
+        
+        for key, pattern in patterns.items():
+            match = re.search(pattern, content)
+            if match:
+                metadata[key] = match.group(1)
+        
+        return metadata
+    except Exception:
+        return {}
+
+
 def _generate_comparison_gallery(
     output_dir: Path,
-    results: List[Tuple[str, bool, str, str]],
+    results: List[Tuple[str, bool, str, str, Dict[str, float]]],
     input_image: str | Path,
     fill_methods: List[str]
 ) -> None:
-    """Generate comparison gallery with side-by-side fill methods"""
+    """Generate comparison gallery with side-by-side fill methods and parameter values"""
 
     # Copy input image for preview
     preview_rel = None
@@ -331,10 +395,32 @@ def _generate_comparison_gallery(
     except Exception:
         pass
 
-    # Enhanced wrapper template for proper image fitting
-    def create_wrapper_template(geom_name: str, method: str) -> str:
-        method_suffix = "_cascade" if method == "cascade" else "_default"
-        return """<!doctype html>
+    # Enhanced wrapper template with metadata from SVG
+    def create_wrapper_template(geom_name: str, method: str, params: Dict[str, float], svg_metadata: Dict[str, str]) -> str:
+        params_html = ""
+        if params:
+            param_items = [f"{k}={v}" for k, v in params.items()]
+            params_html = f"<div style='font-size:11px; margin-top:3px'>{' | '.join(param_items)}</div>"
+        
+        # Add metadata display
+        metadata_html = ""
+        if svg_metadata:
+            meta_items = []
+            if 'actual_shapes' in svg_metadata:
+                meta_items.append(f"Shapes: {svg_metadata['actual_shapes']}")
+            if 'generation_time' in svg_metadata:
+                gen_time = float(svg_metadata['generation_time'])
+                meta_items.append(f"Time: {gen_time:.2f}s")
+            if 'space_utilization' in svg_metadata:
+                space_util = float(svg_metadata['space_utilization'])
+                meta_items.append(f"Coverage: {space_util:.1f}%")
+            if 'create_date' in svg_metadata:
+                meta_items.append(f"Created: {svg_metadata['create_date']}")
+            
+            if meta_items:
+                metadata_html = f"<div style='font-size:11px; margin-top:5px; padding:5px; background:rgba(0,123,255,0.15); border-radius:3px'>{' | '.join(meta_items)}</div>"
+        
+        return f"""<!doctype html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -359,11 +445,12 @@ def _generate_comparison_gallery(
             transform: translateX(-50%);
             color: white;
             font-family: Arial, sans-serif;
-            font-size: 14px;
-            background: rgba(0,0,0,0.7);
-            padding: 5px 15px;
+            background: rgba(0,0,0,0.85);
+            padding: 8px 15px;
             border-radius: 5px;
             z-index: 100;
+            max-width: 90%;
+            text-align: center;
         }}
         .svg-container {{
             width: 100vw;
@@ -386,7 +473,11 @@ def _generate_comparison_gallery(
     </style>
 </head>
 <body>
-    <div class="header">{geom_name} ({method} fill)</div>
+    <div class="header">
+        <div style="font-size:14px; font-weight:bold">{geom_name} ({method} fill)</div>
+        {params_html}
+        {metadata_html}
+    </div>
     <div class="svg-container">
         <img src="frame_{geom_name}.svg" alt="{geom_name} {method} fill">
     </div>
@@ -395,15 +486,14 @@ def _generate_comparison_gallery(
 
     # Group results by geometry for side-by-side comparison
     results_by_geom = {}
-    for geom, success, msg, method in results:
+    for geom, success, msg, method, params in results:
         if geom not in results_by_geom:
             results_by_geom[geom] = {}
-        results_by_geom[geom][method] = (success, msg)
+        results_by_geom[geom][method] = (success, msg, params)
 
     gallery_items = []
 
     for geom in results_by_geom:
-        # Create comparison row for this geometry
         method_columns = []
 
         for method in fill_methods:
@@ -412,11 +502,14 @@ def _generate_comparison_gallery(
             wrapper_path = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.html"
 
             if method in results_by_geom[geom]:
-                success, msg = results_by_geom[geom][method]
+                success, msg, params = results_by_geom[geom][method]
 
                 if success and svg_path.exists():
-                    # Create enhanced wrapper with img tag instead of object
-                    wrapper_html = create_wrapper_template(geom, method)
+                    # Extract metadata from SVG
+                    svg_metadata = _extract_svg_metadata(svg_path)
+                    
+                    # Create enhanced wrapper with metadata
+                    wrapper_html = create_wrapper_template(geom, method, params, svg_metadata)
                     wrapper_path.parent.mkdir(parents=True, exist_ok=True)
                     wrapper_path.write_text(wrapper_html, encoding="utf-8")
 
@@ -429,23 +522,35 @@ def _generate_comparison_gallery(
                         else f"{file_size} bytes"
                     )
 
-                    # Count shapes in SVG
-                    shapes = "unknown"
-                    try:
-                        svg_content = svg_path.read_text(encoding="utf-8")
-                        shapes = (
-                            svg_content.count("<circle")
-                            + svg_content.count("<polygon")
-                            + svg_content.count("<path")
-                            + svg_content.count("<rect")
-                        )
-                    except Exception:
-                        pass
+                    # Count shapes from metadata
+                    shapes = svg_metadata.get('actual_shapes', 'unknown')
+
+                    # Format metadata for display - make it prominent
+                    metadata_display = ""
+                    if svg_metadata:
+                        meta_lines = []
+                        if 'generation_time' in svg_metadata:
+                            gen_time = float(svg_metadata['generation_time'])
+                            meta_lines.append(f"<div style='font-size:11px; color:#28a745; font-weight:bold'>Generation: {gen_time:.2f}s</div>")
+                        if 'space_utilization' in svg_metadata:
+                            space_util = float(svg_metadata['space_utilization'])
+                            meta_lines.append(f"<div style='font-size:11px; color:#007bff; font-weight:bold'>Coverage: {space_util:.1f}%</div>")
+                        if 'create_date' in svg_metadata:
+                            meta_lines.append(f"<div style='font-size:10px; color:#666'>{svg_metadata['create_date']}</div>")
+                        metadata_display = "<div style='margin-top:8px; padding:8px; background:#f8f9fa; border-left:3px solid #007bff; border-radius:3px'>" + "".join(meta_lines) + "</div>"
+
+                    # Format parameters for display
+                    params_display = ""
+                    if params:
+                        param_lines = [f"<div style='font-size:11px'>{k}: {v}</div>" for k, v in params.items()]
+                        params_display = "".join(param_lines)
 
                     method_columns.append(f"""
                         <div class="method-column">
                             <h4>✅ {method.title()} Fill</h4>
                             <p><strong>{shapes} shapes</strong> • {size_str}</p>
+                            {params_display if params_display else '<div style="font-size:11px; color:#999">No custom parameters</div>'}
+                            {metadata_display}
                             <p><a href="{rel_wrapper}" target="_blank">view fullscreen</a> | <a href="{rel_svg}" target="_blank">raw SVG</a></p>
                             <div class="thumbnail-container" onclick="window.open('{rel_wrapper}', '_blank')">
                                 <img src="{rel_svg}" alt="{geom} {method} fill">
@@ -455,7 +560,7 @@ def _generate_comparison_gallery(
                 else:
                     method_columns.append(f"""
                         <div class="method-column">
-                            <h4>⚠ {method.title()} Fill</h4>
+                            <h4>Failed</h4>
                             <p>Failed to generate</p>
                             <div class="thumbnail-container error">
                                 <p>No SVG generated</p>
@@ -473,7 +578,6 @@ def _generate_comparison_gallery(
                     </div>
                 """)
 
-        # Create geometry comparison row
         gallery_items.append(f"""
             <div class="geometry-comparison">
                 <h3>{geom}</h3>
@@ -483,18 +587,16 @@ def _generate_comparison_gallery(
             </div>
         """)
 
-    # Build preview section
     preview_html = ""
     if preview_rel:
         preview_html = f'<div style="margin-bottom:16px"><h3>Input preview</h3><a href="{preview_rel}" target="_blank"><img src="{preview_rel}" style="max-width:420px;max-height:300px;border:1px solid #ccc;object-fit:contain"></a></div>'
 
-    # Enhanced gallery template with comparison layout
-    html_content = """
+    html_content = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
-        <title>Cubist Art Gallery - Fill Method Comparison</title>
+        <title>Cubist Art Gallery</title>
         <style>
             body {{
                 font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -539,7 +641,7 @@ def _generate_comparison_gallery(
                 align-items: center;
                 justify-content: center;
                 transition: transform 0.2s ease;
-                position: relative;
+                margin-top: 10px;
             }}
             .thumbnail-container:hover {{
                 transform: scale(1.02);
@@ -551,7 +653,6 @@ def _generate_comparison_gallery(
                 width: auto;
                 height: auto;
                 object-fit: contain;
-                display: block;
             }}
             .thumbnail-container.error {{
                 background: #f8d7da;
@@ -578,8 +679,8 @@ def _generate_comparison_gallery(
     </head>
     <body>
         <div class="header">
-            <h1>🎨 Cubist Art Gallery - Fill Method Comparison</h1>
-            <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Methods: {', '.join(fill_methods)}</p>
+            <h1>Cubist Art Gallery</h1>
+            <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
         {preview_html}
         <div class="gallery">
@@ -594,6 +695,8 @@ def _generate_comparison_gallery(
 # ----------------- Flask routes -----------------
 @app.route("/")
 def index():
+    geom_params_json = json.dumps(GEOMETRY_PARAMETERS)
+    
     return Response(render_template_string("""
 <!doctype html><html><head><meta charset="utf-8"><title>Cubist Production UI v2.5</title>
 <style>
@@ -606,6 +709,8 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
 .button:hover{background:#0056b3}
 .button.secondary{background:#6c757d}
 .button.secondary:hover{background:#545b62}
+.button.danger{background:#dc3545}
+.button.danger:hover{background:#c82333}
 .log{background:#111;color:#eee;padding:15px;height:300px;overflow:auto;font-family:'Courier New',monospace;border-radius:4px}
 .preview{max-width:360px;max-height:200px;border:1px solid #444;border-radius:6px}
 .points-input{width:100px;padding:8px;margin-right:8px;border:1px solid #ddd;border-radius:4px}
@@ -617,9 +722,27 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
 .status{margin:10px 0;font-weight:bold;padding:8px;border-radius:4px}
 .status.idle{background:#d4edda;color:#155724}
 .status.running{background:#cce7ff;color:#004085}
+
+.geometry-card{background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:15px;margin-bottom:15px}
+.geometry-card-header{display:flex;align-items:center;margin-bottom:10px}
+.geometry-card-header input[type=checkbox]{margin-right:10px;transform:scale(1.2)}
+.geometry-card-header label{font-size:16px;font-weight:bold;margin:0;cursor:pointer}
+.geometry-card.unchecked{opacity:0.5}
+.geometry-card.unchecked .param-panel{pointer-events:none}
+
+.param-panel{background:white;padding:15px;border-radius:6px;border:1px solid #dee2e6;margin-top:10px}
+.param-panel-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #007bff}
+.param-panel-title{font-weight:bold;font-size:14px;color:#495057}
+.param-row{display:grid;grid-template-columns:150px 1fr 80px;gap:10px;align-items:center;margin-bottom:12px}
+.param-label{font-weight:500;font-size:13px}
+.param-description{font-size:11px;color:#666;grid-column:1/4;margin-top:-8px;margin-bottom:8px}
+.slider-container{display:flex;gap:8px;align-items:center}
+.param-slider{flex:1;min-width:150px}
+.param-text{width:70px;padding:4px 6px;border:1px solid #ddd;border-radius:3px;text-align:right;font-size:13px}
+.param-text.invalid{border-color:#dc3545;background:#fee}
 </style>
 </head><body>
-<h1>🎨 Cubist Art — Production UI v2.5.0</h1>
+<h1>Cubist Art — Production UI v2.5.0</h1>
 
 <div class="card">
   <h3>Input Configuration</h3>
@@ -647,34 +770,30 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
 </div>
 
 <div class="card">
-  <h3>Fill Methods (Select Multiple for Side-by-Side Comparison)</h3>
+  <h3>Fill Methods</h3>
   <div class="fill-method-section">
     <div class="fill-method-option">
       <label>
         <input type="checkbox" name="fill_method" value="default" checked/>
         <strong>Default Fill</strong>
       </label>
-      <div class="fill-method-description">Base shapes only - traditional algorithm</div>
+      <div class="fill-method-description">Base shapes only</div>
     </div>
     <div class="fill-method-option">
       <label>
         <input type="checkbox" name="fill_method" value="cascade"/>
         <strong>Cascade Fill</strong>
       </label>
-      <div class="fill-method-description">Base shapes + gap filling - higher density, better coverage</div>
+      <div class="fill-method-description">Base shapes + gap filling</div>
     </div>
   </div>
 </div>
 
 <div class="card">
-  <h3>Geometries</h3>
-  <div class="row">
-    {% for g in geoms %}
-      <label style="margin-right:15px;display:inline-block">
-        <input type="checkbox" id="geom_{{g}}" {% if loop.index <= 3 %}checked{% endif %}/>
-        <strong>{{g}}</strong>
-      </label>
-    {% endfor %}
+  <h3>Geometries & Parameters</h3>
+  <div id="geometry-cards"></div>
+  <div style="margin-top:15px">
+    <button class="button danger" onclick="factoryReset()">Factory Reset All Parameters</button>
   </div>
 </div>
 
@@ -686,7 +805,7 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
   </div>
 
   <div class="row">
-    <button class="button" id="run_btn" onclick="runBatch()">🚀 Run Batch</button>
+    <button class="button" id="run_btn" onclick="runBatch()">Run Batch</button>
     <button class="button secondary" onclick="clearLog()">Clear Log</button>
     <button class="button secondary" onclick="copyLog()">Copy Log</button>
   </div>
@@ -701,6 +820,170 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
 
 <script>
 const geoms = {{ geoms_json|safe }};
+const GEOMETRY_PARAMETERS = {{ geom_params_json|safe }};
+
+function createGeometryCard(geom, defaultChecked) {
+  const params = GEOMETRY_PARAMETERS[geom];
+  
+  let paramRows = '';
+  if (params && Object.keys(params).length > 0) {
+    for (const [paramName, paramDef] of Object.entries(params)) {
+      const sliderId = `slider_${geom}_${paramName}`;
+      const textId = `text_${geom}_${paramName}`;
+      
+      paramRows += `
+        <div class="param-row">
+          <div class="param-label">${paramDef.label}:</div>
+          <div class="slider-container">
+            <input type="range" 
+              class="param-slider" 
+              id="${sliderId}"
+              min="${paramDef.min}" 
+              max="${paramDef.max}" 
+              step="${paramDef.step}" 
+              value="${paramDef.default}"
+              oninput="syncSliderToText('${geom}', '${paramName}')"/>
+            <input type="text" 
+              class="param-text" 
+              id="${textId}"
+              value="${paramDef.default}"
+              onchange="syncTextToSlider('${geom}', '${paramName}')"/>
+          </div>
+        </div>
+        <div class="param-description">${paramDef.description}</div>
+      `;
+    }
+  }
+
+  const paramPanel = paramRows ? `
+    <div class="param-panel">
+      <div class="param-panel-header">
+        <div class="param-panel-title">Parameters</div>
+        <button class="button secondary" style="font-size:11px;padding:4px 8px" onclick="resetGeometryParams('${geom}')">Reset</button>
+      </div>
+      ${paramRows}
+    </div>
+  ` : '<div style="padding:10px;color:#666;font-size:13px">No configurable parameters</div>';
+
+  return `
+    <div class="geometry-card ${defaultChecked ? '' : 'unchecked'}" id="card_${geom}">
+      <div class="geometry-card-header">
+        <input type="checkbox" id="geom_${geom}" ${defaultChecked ? 'checked' : ''} onchange="updateGeometryCard('${geom}')"/>
+        <label for="geom_${geom}">${geom}</label>
+      </div>
+      ${paramPanel}
+    </div>
+  `;
+}
+
+function updateGeometryCard(geom) {
+  const checkbox = document.getElementById(`geom_${geom}`);
+  const card = document.getElementById(`card_${geom}`);
+  
+  if (checkbox && card) {
+    if (checkbox.checked) {
+      card.classList.remove('unchecked');
+    } else {
+      card.classList.add('unchecked');
+    }
+  }
+  
+  savePrefs();
+}
+
+function initGeometryCards() {
+  const container = document.getElementById('geometry-cards');
+  let html = '';
+  
+  geoms.forEach((geom, index) => {
+    html += createGeometryCard(geom, index < 3);
+  });
+  
+  container.innerHTML = html;
+}
+
+function syncSliderToText(geom, paramName) {
+  const slider = document.getElementById(`slider_${geom}_${paramName}`);
+  const text = document.getElementById(`text_${geom}_${paramName}`);
+  text.value = slider.value;
+  text.classList.remove('invalid');
+  savePrefs();
+}
+
+function syncTextToSlider(geom, paramName) {
+  const slider = document.getElementById(`slider_${geom}_${paramName}`);
+  const text = document.getElementById(`text_${geom}_${paramName}`);
+  const paramDef = GEOMETRY_PARAMETERS[geom][paramName];
+  
+  const value = parseFloat(text.value);
+  if (isNaN(value)) {
+    text.classList.add('invalid');
+    return;
+  }
+  
+  if (value < paramDef.min || value > paramDef.max) {
+    text.classList.add('invalid');
+    return;
+  }
+  
+  text.classList.remove('invalid');
+  slider.value = value;
+  savePrefs();
+}
+
+function resetGeometryParams(geom) {
+  const params = GEOMETRY_PARAMETERS[geom];
+  for (const [paramName, paramDef] of Object.entries(params)) {
+    const slider = document.getElementById(`slider_${geom}_${paramName}`);
+    const text = document.getElementById(`text_${geom}_${paramName}`);
+    if (slider && text) {
+      slider.value = paramDef.default;
+      text.value = paramDef.default;
+      text.classList.remove('invalid');
+    }
+  }
+  savePrefs();
+  alert(`${geom} parameters reset to factory defaults`);
+}
+
+function factoryReset() {
+  if (!confirm('Reset ALL geometry parameters to factory defaults?')) return;
+  
+  geoms.forEach(geom => {
+    const params = GEOMETRY_PARAMETERS[geom];
+    if (!params) return;
+    for (const [paramName, paramDef] of Object.entries(params)) {
+      const slider = document.getElementById(`slider_${geom}_${paramName}`);
+      const text = document.getElementById(`text_${geom}_${paramName}`);
+      if (slider && text) {
+        slider.value = paramDef.default;
+        text.value = paramDef.default;
+        text.classList.remove('invalid');
+      }
+    }
+  });
+  
+  savePrefs();
+  alert('All parameters reset to factory defaults');
+}
+
+function getGeometryParameters() {
+  const result = {};
+  geoms.forEach(geom => {
+    const params = GEOMETRY_PARAMETERS[geom];
+    if (!params) return;
+    
+    const geomParams = {};
+    for (const paramName of Object.keys(params)) {
+      const text = document.getElementById(`text_${geom}_${paramName}`);
+      if (text && !text.classList.contains('invalid')) {
+        geomParams[paramName] = parseFloat(text.value);
+      }
+    }
+    result[geom] = geomParams;
+  });
+  return result;
+}
 
 function validatePoints(value) {
   const num = parseInt(value);
@@ -795,7 +1078,8 @@ async function savePrefs(obj){
       geoms: Array.from(geoms).filter(g=>document.getElementById('geom_'+g).checked),
       auto_open_gallery: document.getElementById('auto_open').checked,
       verbose_probe: document.getElementById('verbose').checked,
-      fill_methods: getSelectedFillMethods()
+      fill_methods: getSelectedFillMethods(),
+      geometry_parameters: getGeometryParameters()
     };
     const payload = Object.assign(base, obj||{});
     await fetch('/save_prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -807,20 +1091,15 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('points').addEventListener('blur', updatePointsValidation);
 
   await loadInputFiles();
+  initGeometryCards();
 
   document.getElementById('auto_open').addEventListener('change', ()=> savePrefs());
   document.getElementById('verbose').addEventListener('change', ()=> savePrefs());
-
-  geoms.forEach(g=>{
-    const el = document.getElementById('geom_'+g);
-    if(el) el.addEventListener('change', ()=> savePrefs());
-  });
 
   document.querySelectorAll('input[name="fill_method"]').forEach(checkbox => {
     checkbox.addEventListener('change', () => savePrefs());
   });
 
-  // Load prefs
   try{
     const p = await (await fetch('/prefs')).json();
     if(p.input_image) document.getElementById('input_image').value = p.input_image;
@@ -838,8 +1117,32 @@ document.addEventListener('DOMContentLoaded', async ()=>{
       });
     }
 
+    if(p.geometry_parameters){
+      geoms.forEach(geom => {
+        const savedParams = p.geometry_parameters[geom];
+        if(savedParams){
+          for(const [paramName, value] of Object.entries(savedParams)){
+            const slider = document.getElementById(`slider_${geom}_${paramName}`);
+            const text = document.getElementById(`text_${geom}_${paramName}`);
+            if(slider && text){
+              slider.value = value;
+              text.value = value;
+            }
+          }
+        }
+      });
+    }
+
     setInputPreview(p.input_image || '');
     updatePointsValidation();
+    
+    geoms.forEach(geom => {
+      const checkbox = document.getElementById(`geom_${geom}`);
+      const card = document.getElementById(`card_${geom}`);
+      if (checkbox && card && !checkbox.checked) {
+        card.classList.add('unchecked');
+      }
+    });
   }catch(e){ console.warn('prefs load', e); }
 });
 
@@ -859,12 +1162,30 @@ async function runBatch(){
   const fillMethods = getSelectedFillMethods();
   if(fillMethods.length===0){ alert('Select at least one fill method'); return; }
 
+  let hasInvalidParams = false;
+  geoms.forEach(geom => {
+    const params = GEOMETRY_PARAMETERS[geom];
+    if(!params) return;
+    for(const paramName of Object.keys(params)){
+      const text = document.getElementById(`text_${geom}_${paramName}`);
+      if(text && text.classList.contains('invalid')){
+        hasInvalidParams = true;
+      }
+    }
+  });
+
+  if(hasInvalidParams){
+    alert('Some parameter values are invalid. Please correct them before running.');
+    return;
+  }
+
   const payload = {
     input_image: inputImage,
     points: pointsValidation.value,
     seed: 42,
     geoms: selected,
     fill_methods: fillMethods,
+    geometry_parameters: getGeometryParameters(),
     auto_open: document.getElementById('auto_open').checked,
     verbose: document.getElementById('verbose').checked
   };
@@ -872,7 +1193,6 @@ async function runBatch(){
   await fetch('/run_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 }
 
-// Polling logs/status
 setInterval(async ()=>{
   try{
     const st = await (await fetch('/status')).json();
@@ -895,7 +1215,7 @@ setInterval(async ()=>{
 }, 1000);
 </script>
 </body></html>
-    """, geoms_json=json.dumps(GEOMS), geoms=GEOMS), content_type='text/html; charset=utf-8')
+    """, geoms_json=json.dumps(GEOMS), geoms=GEOMS, geom_params_json=geom_params_json), content_type='text/html; charset=utf-8')
 
 
 @app.route("/input_files")
@@ -983,6 +1303,7 @@ def run_batch():
             int(data.get("points", 500)),
             int(data.get("seed", 42)),
             data.get("fill_methods", ["default"]),
+            data.get("geometry_parameters", {}),
             bool(data.get("auto_open", True)),
             bool(data.get("verbose", False)),
         ),
@@ -1014,9 +1335,9 @@ def prefs():
 
 
 if __name__ == "__main__":
-    print("🎨 Cubist Production UI v2.5.0 - Side-by-Side Fill Comparison")
-    print("🚀 Server running at http://127.0.0.1:5123")
+    print("Cubist Production UI v2.5.0 - Metadata Integration Complete")
+    print("Server running at http://127.0.0.1:5123")
     try:
         app.run(host="127.0.0.1", port=5123, debug=False)
     except Exception as e:
-        print(f"❌ Server failed to start: {e}")
+        print(f"Server failed to start: {e}")

@@ -1,6 +1,6 @@
 {
   "input_image": "G:\\My Drive\\Code\\Python\\cubist_art\\input\\x_your_input_image.jpg",
-  "points": 8000,
+  "points": 2000,
   "seed": 42,
   "export_svg": true,
   "enable_plugin_exec": true,
@@ -17,6 +17,37 @@
     "default",
     "cascade"
   ],
+  "geometry_parameters": {
+    "rectangles": {
+      "min_size_multiplier": 0.25,
+      "max_size_multiplier": 5,
+      "aspect_ratio_variance": 4,
+      "overlap_tolerance": -3,
+      "cascade_intensity": 0.8,
+      "opacity": 0.7
+    },
+    "delaunay": {
+      "cascade_intensity": 0.8,
+      "opacity": 0.7
+    },
+    "voronoi": {
+      "cascade_intensity": 0.8,
+      "opacity": 0.7
+    },
+    "poisson_disk": {
+      "min_dist_factor": 0.025,
+      "radius_multiplier": 1,
+      "cascade_intensity": 0.8,
+      "opacity": 0.7
+    },
+    "scatter_circles": {
+      "min_dist_factor": 0.008,
+      "radius_multiplier": 1,
+      "jitter": 0.25,
+      "cascade_intensity": 0.8,
+      "opacity": 0.7
+    }
+  },
   "auto_open": true,
   "verbose": true
 }

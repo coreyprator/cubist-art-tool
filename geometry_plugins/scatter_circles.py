@@ -1,9 +1,5 @@
-# geometry_plugins/scatter_circles.py - Enhanced with Universal Cascade Fill
-# Scatter circles with grid-jitter blue-noise, sized to resemble the source
-#
-# API: compatible with cubist_cli plugin loader
-#   - generate(canvas_size: (W,H), total_points:int=1000, seed:int=0, **params)
-#   - register(register_geometry) -> None
+# geometry_plugins/scatter_circles.py - Parameter Registry Integration
+# Enhanced with configurable radius_multiplier, jitter, cascade_intensity, and opacity
 
 from __future__ import annotations
 
@@ -15,7 +11,6 @@ from typing import Callable, Iterable, List, Sequence, Tuple, Dict
 try:
     from cascade_fill_system import apply_universal_cascade_fill, sample_image_color
 except ImportError:
-    # Fallback if cascade system not available
     def apply_universal_cascade_fill(
         shapes, canvas_size, target_count, shape_generator, seed=42, verbose=False
     ):
@@ -24,30 +19,46 @@ except ImportError:
     def sample_image_color(input_image, x, y, canvas_width, canvas_height):
         return "rgb(128,128,128)"
 
+# Import parameter registry
+try:
+    from geometry_parameters import get_parameter_default, validate_parameter
+except ImportError:
+    def get_parameter_default(geometry, param):
+        defaults = {
+            "min_dist_factor": 0.008,
+            "radius_multiplier": 1.0,
+            "jitter": 0.25,
+            "cascade_intensity": 0.8,
+            "opacity": 0.7
+        }
+        return defaults.get(param)
+    
+    def validate_parameter(geometry, param, value):
+        return True, value, ""
+
 
 # ---- trace helpers (robust to different import styles) -----------------------
-try:  # try package-relative first
-    from ._trace import TRACE, t, dump, try_stats  # type: ignore
+try:
+    from ._trace import TRACE, t, dump, try_stats
 except Exception:
     try:
-        from geometry_plugins._trace import TRACE, t, dump, try_stats  # type: ignore
-    except Exception:  # final fallback: no-ops
-        TRACE = False  # type: ignore
+        from geometry_plugins._trace import TRACE, t, dump, try_stats
+    except Exception:
+        TRACE = False
 
-        def t(msg: str) -> None:  # type: ignore
+        def t(msg: str) -> None:
             pass
 
-        def dump(label: str, data) -> None:  # type: ignore
+        def dump(label: str, data) -> None:
             pass
 
-        def try_stats(samples):  # type: ignore
+        def try_stats(samples):
             return {
                 "n": len(samples) if hasattr(samples, "__len__") else 0,
             }
 
 
 # ---- core helpers ------------------------------------------------------------
-
 
 def _unpack_wh(canvas_size: Sequence[int]) -> Tuple[int, int]:
     if not isinstance(canvas_size, (tuple, list)) or len(canvas_size) < 2:
@@ -60,17 +71,17 @@ def _unpack_wh(canvas_size: Sequence[int]) -> Tuple[int, int]:
 
 
 def _auto_radius(
-    W: int, H: int, total_points: int, min_dist_factor: float = 0.008
+    W: int, H: int, total_points: int, min_dist_factor: float = 0.008, radius_multiplier: float = 1.0
 ) -> float:
-    """Calculate radius based on canvas size and spacing, following universal formula."""
+    """Calculate radius based on canvas size, spacing, and coverage multiplier."""
     total_points = max(1, int(total_points))
 
-    # Use universal formula: dense packing with overlapping circles for complete coverage
+    # Use universal formula: spacing determines base distance
     diagonal = math.sqrt(W * W + H * H)
     min_dist = diagonal * min_dist_factor
 
-    # For complete coverage with no white space: radius = min_dist * 1.0 (overlapping)
-    radius = min_dist * 1.0
+    # Apply radius multiplier for coverage control
+    radius = min_dist * radius_multiplier
 
     # Ensure reasonable minimum radius
     radius = max(radius, 3.0)
@@ -86,16 +97,13 @@ def _grid_jitter_samples(
     margin: float,
     min_dist_factor: float = 0.008,
 ) -> List[Tuple[float, float]]:
-    """Evenly scatter ~total_points samples over the canvas via grid jitter.
-
-    Enhanced with dense packing parameters for better coverage.
-    """
+    """Evenly scatter ~total_points samples over the canvas via grid jitter."""
     total_points = max(1, int(total_points))
 
-    # FIXED: Use smaller cell size for denser packing (following universal formula)
+    # Use minimum distance as cell size for dense packing
     diagonal = math.sqrt(W * W + H * H)
     min_dist = diagonal * min_dist_factor
-    s = min_dist  # Use minimum distance as cell size for dense packing
+    s = min_dist
 
     cols = max(1, int(round(W / s)))
     rows = max(1, int(round(H / s)))
@@ -107,7 +115,6 @@ def _grid_jitter_samples(
             y0 = j * s
             x = x0 + rng.random() * s
             y = y0 + rng.random() * s
-            # clamp to keep a margin so circles don't clip the edges
             if margin > 0:
                 x = min(max(x, margin), W - margin)
                 y = min(max(y, margin), H - margin)
@@ -115,7 +122,6 @@ def _grid_jitter_samples(
 
     # Balance count to requested total_points
     if len(pts) > total_points:
-        # downsample deterministically with PRNG for reproducibility
         rng.shuffle(pts)
         pts = pts[:total_points]
     elif len(pts) < total_points:
@@ -132,11 +138,6 @@ def _grid_jitter_samples(
 
 # ---- public plugin API -------------------------------------------------------
 
-
-# geometry_plugins/scatter_circles.py - Integer Coordinates Optimization
-# [Keep all imports and helper functions the same, only changing the coordinate conversion]
-
-
 def scatter_circles(
     canvas_size: Sequence[int],
     total_points: int = 1000,
@@ -147,6 +148,8 @@ def scatter_circles(
     margin: float | str = "auto",
     input_image=None,
     min_dist_factor: float = 0.008,
+    radius_multiplier: float = 1.0,
+    opacity: float = 0.7,
     **kwargs,
 ) -> List[dict]:
     """Return a list of circles as dict format for SVG export."""
@@ -154,11 +157,11 @@ def scatter_circles(
     rng = random.Random(int(seed))
 
     if radius in (None, "auto"):
-        r = _auto_radius(W, H, total_points, min_dist_factor)
+        r = _auto_radius(W, H, total_points, min_dist_factor, radius_multiplier)
     else:
         r = float(radius)
         if r <= 0:
-            r = _auto_radius(W, H, total_points, min_dist_factor)
+            r = _auto_radius(W, H, total_points, min_dist_factor, radius_multiplier)
 
     if margin == "auto":
         m = r
@@ -169,7 +172,7 @@ def scatter_circles(
 
     if TRACE:
         t(
-            f"canvas={W}x{H} total_points={total_points} seed={seed} radius={r:.4f} jitter={jitter} min_dist_factor={min_dist_factor}"
+            f"canvas={W}x{H} total_points={total_points} seed={seed} radius={r:.4f} jitter={jitter} min_dist_factor={min_dist_factor} radius_multiplier={radius_multiplier}"
         )
 
     pts = _grid_jitter_samples(
@@ -218,6 +221,7 @@ def scatter_circles(
             "fill": _sample_image_color(input_image, x, y, W, H),
             "stroke": "none",
             "stroke_width": 0,
+            "opacity": opacity,  # Pass opacity to shape
         }
         circle_data.append(circle_dict)
 
@@ -230,19 +234,65 @@ def generate(
     seed: int = 0,
     input_image=None,
     min_dist_factor: float = None,
+    radius_multiplier: float = None,
+    jitter: float = None,
     cascade_fill_enabled: bool = False,
-    cascade_intensity: float = 0.8,
+    cascade_intensity: float = None,
+    opacity: float = None,
     verbose: bool = False,
     **kwargs,
 ) -> List[dict]:
     """Generate scattered circles and return shapes for SVG export."""
     W, H = canvas_size
 
+    # Apply defaults from parameter registry
+    if min_dist_factor is None:
+        min_dist_factor = get_parameter_default("scatter_circles", "min_dist_factor")
+    else:
+        valid, clamped, msg = validate_parameter("scatter_circles", "min_dist_factor", min_dist_factor)
+        if not valid and verbose:
+            print(f"[scatter_circles] Parameter validation: {msg}, using {clamped}")
+        min_dist_factor = clamped
+    
+    if radius_multiplier is None:
+        radius_multiplier = get_parameter_default("scatter_circles", "radius_multiplier")
+    else:
+        valid, clamped, msg = validate_parameter("scatter_circles", "radius_multiplier", radius_multiplier)
+        if not valid and verbose:
+            print(f"[scatter_circles] Parameter validation: {msg}, using {clamped}")
+        radius_multiplier = clamped
+    
+    if jitter is None:
+        jitter = get_parameter_default("scatter_circles", "jitter")
+    else:
+        valid, clamped, msg = validate_parameter("scatter_circles", "jitter", jitter)
+        if not valid and verbose:
+            print(f"[scatter_circles] Parameter validation: {msg}, using {clamped}")
+        jitter = clamped
+    
+    if cascade_intensity is None:
+        cascade_intensity = get_parameter_default("scatter_circles", "cascade_intensity")
+    else:
+        valid, clamped, msg = validate_parameter("scatter_circles", "cascade_intensity", cascade_intensity)
+        if not valid and verbose:
+            print(f"[scatter_circles] Parameter validation: {msg}, using {clamped}")
+        cascade_intensity = clamped
+    
+    if opacity is None:
+        opacity = get_parameter_default("scatter_circles", "opacity")
+    else:
+        valid, clamped, msg = validate_parameter("scatter_circles", "opacity", opacity)
+        if not valid and verbose:
+            print(f"[scatter_circles] Parameter validation: {msg}, using {clamped}")
+        opacity = clamped
+
     if verbose:
         print(
             f"[scatter_circles] Scatter circles generation - Cascade: {'ENABLED' if cascade_fill_enabled else 'DISABLED'}"
         )
         print(f"[scatter_circles] Canvas: {W}x{H}, Target: {total_points} points")
+        print(f"[scatter_circles] Parameters: min_dist_factor={min_dist_factor}, radius_multiplier={radius_multiplier}")
+        print(f"[scatter_circles] Parameters: jitter={jitter}, cascade_intensity={cascade_intensity}, opacity={opacity}")
 
     if cascade_fill_enabled:
         base_target = max(int(total_points * 0.7), 20)
@@ -255,18 +305,6 @@ def generate(
         if verbose:
             print(f"[scatter_circles] Default mode: generating {base_target} points")
 
-    if min_dist_factor is None:
-        min_dist_factor = 0.008
-        if verbose:
-            print(
-                f"[scatter_circles] Using ultra-dense packing min_dist_factor: {min_dist_factor}"
-            )
-    else:
-        if verbose:
-            print(
-                f"[scatter_circles] Using provided min_dist_factor: {min_dist_factor}"
-            )
-
     try:
         shapes = scatter_circles(
             canvas_size,
@@ -274,6 +312,9 @@ def generate(
             seed,
             input_image=input_image,
             min_dist_factor=min_dist_factor,
+            radius_multiplier=radius_multiplier,
+            jitter=jitter,
+            opacity=opacity,
             verbose=verbose,
             **kwargs,
         )
@@ -284,7 +325,7 @@ def generate(
             print(f"[scatter_circles] Error in scatter_circles: {e}")
         random.seed(seed)
         shapes = []
-        radius = _auto_radius(W, H, base_target, min_dist_factor)
+        radius = _auto_radius(W, H, base_target, min_dist_factor, radius_multiplier)
         for _ in range(base_target):
             x = random.uniform(radius, W - radius)
             y = random.uniform(radius, H - radius)
@@ -297,6 +338,7 @@ def generate(
                     "fill": _sample_image_color(input_image, x, y, W, H),
                     "stroke": "none",
                     "stroke_width": 0,
+                    "opacity": opacity,
                 }
             )
 
@@ -310,7 +352,7 @@ def generate(
         base_radius = (
             shapes[0]["r"]
             if shapes
-            else _auto_radius(W, H, total_points, min_dist_factor)
+            else _auto_radius(W, H, total_points, min_dist_factor, radius_multiplier)
         )
         cascade_radius = base_radius * cascade_intensity * 0.4
 
@@ -324,6 +366,7 @@ def generate(
                 "fill": "rgb(128,128,128)",
                 "stroke": "none",
                 "stroke_width": 0,
+                "opacity": opacity,  # Pass opacity to cascade shapes too
             }
 
         enhanced_shapes = apply_universal_cascade_fill(
@@ -357,10 +400,7 @@ def generate(
     return shapes
 
 
-# [Rest of file unchanged - keep register(), _sample_image_color(), etc.]
-
-
-# Registry support (used when not in plugin-exec mode)
+# Registry support
 def register(register_geometry: Callable[[str, Callable[..., Iterable]], None]) -> None:
     register_geometry("scatter_circles", generate)
 
@@ -368,46 +408,29 @@ def register(register_geometry: Callable[[str, Callable[..., Iterable]], None]) 
 def _sample_image_color(
     input_image, x: float, y: float, canvas_width: int, canvas_height: int
 ) -> str:
-    """Sample color from input image at given coordinates, with fallback to gray if no image.
-
-    FIXED: Returns RGB string format like 'rgb(r,g,b)' to match other geometries.
-    """
+    """Sample color from input image at given coordinates."""
     if input_image is None:
-        # Fallback to a neutral gray if no image provided
         return "rgb(128,128,128)"
 
     try:
-        # Get image dimensions
         img_width, img_height = input_image.size
-
-        # Map canvas coordinates to image coordinates
         img_x = int((x / canvas_width) * img_width)
         img_y = int((y / canvas_height) * img_height)
-
-        # Clamp coordinates to image bounds
         img_x = max(0, min(img_width - 1, img_x))
         img_y = max(0, min(img_height - 1, img_y))
-
-        # Sample pixel color
         pixel = input_image.getpixel((img_x, img_y))
 
-        # Handle different image modes
         if isinstance(pixel, tuple):
             if len(pixel) >= 3:
-                # RGB or RGBA
                 return f"rgb({int(pixel[0])},{int(pixel[1])},{int(pixel[2])})"
             elif len(pixel) == 1:
-                # Grayscale
                 return f"rgb({int(pixel[0])},{int(pixel[0])},{int(pixel[0])})"
         else:
-            # Single value (grayscale)
             return f"rgb({int(pixel)},{int(pixel)},{int(pixel)})"
 
     except Exception:
-        # Fallback to gray if sampling fails
         return "rgb(128,128,128)"
 
-    # Default fallback
     return "rgb(128,128,128)"
 
 

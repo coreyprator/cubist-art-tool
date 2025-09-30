@@ -1,4 +1,4 @@
-# geometry_plugins/rectangles.py - Coverage-First with Bold Size Variance
+# geometry_plugins/rectangles.py - Coverage-First with Parameter Registry Integration
 # Strategy: Random placement with dramatic size range and overlap
 
 from __future__ import annotations
@@ -20,6 +20,24 @@ except ImportError:
     def sample_image_color(input_image, x, y, canvas_width, canvas_height):
         return "rgb(128,128,128)"
 
+# Import parameter registry
+try:
+    from geometry_parameters import get_parameter_default, validate_parameter
+except ImportError:
+    def get_parameter_default(geometry, param):
+        defaults = {
+            "min_size_multiplier": 0.25,
+            "max_size_multiplier": 5.0,
+            "aspect_ratio_variance": 4.0,
+            "overlap_tolerance": -3.0,
+            "cascade_intensity": 0.8,
+            "opacity": 0.7
+        }
+        return defaults.get(param)
+    
+    def validate_parameter(geometry, param, value):
+        return True, value, ""
+
 
 PLUGIN_NAME = "rectangles"
 
@@ -29,12 +47,13 @@ def generate(
     total_points: int = 500,
     seed: int = 0,
     input_image=None,
-    min_size_multiplier: float = 0.25,  # 0.25x average - SMALLER
-    max_size_multiplier: float = 5.0,  # 5.0x average - MUCH LARGER
-    aspect_ratio_variance: float = 4.0,  # Increased from 3.5
+    min_size_multiplier: float = None,
+    max_size_multiplier: float = None,
+    aspect_ratio_variance: float = None,
     cascade_fill_enabled: bool = False,
-    cascade_intensity: float = 0.8,
-    overlap_tolerance: float = -3.0,
+    cascade_intensity: float = None,
+    overlap_tolerance: float = None,
+    opacity: float = None,
     verbose: bool = False,
     **params,
 ) -> List[Dict]:
@@ -50,7 +69,58 @@ def generate(
     - min_size_multiplier: Minimum size as fraction of average (default: 0.25)
     - max_size_multiplier: Maximum size as fraction of average (default: 5.0)
     - aspect_ratio_variance: Width/height variation (default: 4.0)
+    - opacity: Shape transparency (default: 0.7)
     """
+    
+    # Apply defaults from parameter registry
+    if min_size_multiplier is None:
+        min_size_multiplier = get_parameter_default("rectangles", "min_size_multiplier")
+    else:
+        valid, clamped, msg = validate_parameter("rectangles", "min_size_multiplier", min_size_multiplier)
+        if not valid and verbose:
+            print(f"[rectangles] Parameter validation: {msg}, using {clamped}")
+        min_size_multiplier = clamped
+    
+    if max_size_multiplier is None:
+        max_size_multiplier = get_parameter_default("rectangles", "max_size_multiplier")
+    else:
+        valid, clamped, msg = validate_parameter("rectangles", "max_size_multiplier", max_size_multiplier)
+        if not valid and verbose:
+            print(f"[rectangles] Parameter validation: {msg}, using {clamped}")
+        max_size_multiplier = clamped
+    
+    if aspect_ratio_variance is None:
+        aspect_ratio_variance = get_parameter_default("rectangles", "aspect_ratio_variance")
+    else:
+        valid, clamped, msg = validate_parameter("rectangles", "aspect_ratio_variance", aspect_ratio_variance)
+        if not valid and verbose:
+            print(f"[rectangles] Parameter validation: {msg}, using {clamped}")
+        aspect_ratio_variance = clamped
+    
+    if overlap_tolerance is None:
+        overlap_tolerance = get_parameter_default("rectangles", "overlap_tolerance")
+    else:
+        valid, clamped, msg = validate_parameter("rectangles", "overlap_tolerance", overlap_tolerance)
+        if not valid and verbose:
+            print(f"[rectangles] Parameter validation: {msg}, using {clamped}")
+        overlap_tolerance = clamped
+    
+    if cascade_intensity is None:
+        cascade_intensity = get_parameter_default("rectangles", "cascade_intensity")
+    else:
+        valid, clamped, msg = validate_parameter("rectangles", "cascade_intensity", cascade_intensity)
+        if not valid and verbose:
+            print(f"[rectangles] Parameter validation: {msg}, using {clamped}")
+        cascade_intensity = clamped
+    
+    if opacity is None:
+        opacity = get_parameter_default("rectangles", "opacity")
+    else:
+        valid, clamped, msg = validate_parameter("rectangles", "opacity", opacity)
+        if not valid and verbose:
+            print(f"[rectangles] Parameter validation: {msg}, using {clamped}")
+        opacity = clamped
+    
     width, height = canvas_size
     rng = random.Random(int(seed))
 
@@ -61,6 +131,9 @@ def generate(
         print(
             f"[rectangles] Canvas: {width}x{height}, Target: {total_points} rectangles"
         )
+        print(f"[rectangles] Parameters: min_size={min_size_multiplier}, max_size={max_size_multiplier}")
+        print(f"[rectangles] Parameters: aspect_ratio={aspect_ratio_variance}, overlap_tolerance={overlap_tolerance}")
+        print(f"[rectangles] Parameters: cascade_intensity={cascade_intensity}, opacity={opacity}")
 
     # Determine base count
     if cascade_fill_enabled:
@@ -102,7 +175,7 @@ def generate(
         verbose,
     )
 
-    # Convert to shape format
+    # Convert to shape format with opacity
     base_shapes = []
     for x, y, w, h in base_rectangles:
         center_x = x + w / 2
@@ -121,6 +194,7 @@ def generate(
                 "fill": color,
                 "stroke": "none",
                 "stroke_width": 0,
+                "opacity": opacity,  # Add opacity to shape
             }
         )
 
@@ -145,6 +219,7 @@ def generate(
                 "fill": "rgb(128,128,128)",
                 "stroke": "none",
                 "stroke_width": 0,
+                "opacity": opacity,  # Add opacity to cascade shapes too
             }
 
         enhanced_shapes = apply_universal_cascade_fill(

@@ -1,5 +1,5 @@
-# geometry_plugins/poisson_disk.py - Integer Coordinates Optimization
-# Fixed parameters for proper blue noise visualization
+# geometry_plugins/poisson_disk.py - Parameter Registry Integration
+# Enhanced with configurable radius_multiplier, cascade_intensity, and opacity
 
 from __future__ import annotations
 import math
@@ -10,7 +10,6 @@ from typing import List, Tuple, Dict
 try:
     from cascade_fill_system import apply_universal_cascade_fill, sample_image_color
 except ImportError:
-
     def apply_universal_cascade_fill(
         shapes, canvas_size, target_count, shape_generator, seed=42, verbose=False
     ):
@@ -18,6 +17,22 @@ except ImportError:
 
     def sample_image_color(input_image, x, y, canvas_width, canvas_height):
         return "rgb(128,128,128)"
+
+# Import parameter registry
+try:
+    from geometry_parameters import get_parameter_default, validate_parameter
+except ImportError:
+    def get_parameter_default(geometry, param):
+        defaults = {
+            "min_dist_factor": 0.025,
+            "radius_multiplier": 1.0,
+            "cascade_intensity": 0.8,
+            "opacity": 0.7
+        }
+        return defaults.get(param)
+    
+    def validate_parameter(geometry, param, value):
+        return True, value, ""
 
 
 PLUGIN_NAME = "poisson_disk"
@@ -200,12 +215,49 @@ def generate(
     seed=0,
     input_image=None,
     min_dist_factor=None,
+    radius_multiplier=None,
     cascade_fill_enabled=False,
-    cascade_intensity=0.8,
+    cascade_intensity=None,
+    opacity=None,
     verbose=False,
     **kwargs,
 ):
     """Generate Poisson disk sampling and return shapes for SVG export."""
+    
+    # Apply defaults from parameter registry
+    if min_dist_factor is None:
+        min_dist_factor = get_parameter_default("poisson_disk", "min_dist_factor")
+    else:
+        # Validate and clamp
+        valid, clamped, msg = validate_parameter("poisson_disk", "min_dist_factor", min_dist_factor)
+        if not valid and verbose:
+            print(f"[poisson_disk] Parameter validation: {msg}, using {clamped}")
+        min_dist_factor = clamped
+    
+    if radius_multiplier is None:
+        radius_multiplier = get_parameter_default("poisson_disk", "radius_multiplier")
+    else:
+        valid, clamped, msg = validate_parameter("poisson_disk", "radius_multiplier", radius_multiplier)
+        if not valid and verbose:
+            print(f"[poisson_disk] Parameter validation: {msg}, using {clamped}")
+        radius_multiplier = clamped
+    
+    if cascade_intensity is None:
+        cascade_intensity = get_parameter_default("poisson_disk", "cascade_intensity")
+    else:
+        valid, clamped, msg = validate_parameter("poisson_disk", "cascade_intensity", cascade_intensity)
+        if not valid and verbose:
+            print(f"[poisson_disk] Parameter validation: {msg}, using {clamped}")
+        cascade_intensity = clamped
+    
+    if opacity is None:
+        opacity = get_parameter_default("poisson_disk", "opacity")
+    else:
+        valid, clamped, msg = validate_parameter("poisson_disk", "opacity", opacity)
+        if not valid and verbose:
+            print(f"[poisson_disk] Parameter validation: {msg}, using {clamped}")
+        opacity = clamped
+    
     if verbose:
         print(
             f"[poisson_disk] Poisson disk generation - Cascade: {'ENABLED' if cascade_fill_enabled else 'DISABLED'}"
@@ -213,6 +265,8 @@ def generate(
         print(
             f"[poisson_disk] Canvas: {canvas_size[0]}x{canvas_size[1]}, Target: {total_points} points"
         )
+        print(f"[poisson_disk] Parameters: min_dist_factor={min_dist_factor}, radius_multiplier={radius_multiplier}")
+        print(f"[poisson_disk] Parameters: cascade_intensity={cascade_intensity}, opacity={opacity}")
 
     if cascade_fill_enabled:
         base_target = max(int(total_points * 0.7), 20)
@@ -224,16 +278,6 @@ def generate(
         base_target = total_points
         if verbose:
             print(f"[poisson_disk] Default mode: generating {base_target} points")
-
-    if min_dist_factor is None:
-        min_dist_factor = 0.008
-        if verbose:
-            print(
-                f"[poisson_disk] Using ultra-dense packing min_dist_factor: {min_dist_factor}"
-            )
-    else:
-        if verbose:
-            print(f"[poisson_disk] Using provided min_dist_factor: {min_dist_factor}")
 
     try:
         points = poisson_disk_sampling(
@@ -255,13 +299,15 @@ def generate(
     width, height = canvas_size
     diagonal = math.sqrt(width * width + height * height)
     min_dist = diagonal * min_dist_factor
-    point_radius = min_dist * 1.0
+    
+    # Apply radius_multiplier to control coverage
+    point_radius = min_dist * radius_multiplier
     point_radius = max(point_radius, 3.0)
 
     if verbose:
         print(f"[poisson_disk] Min distance: {min_dist:.1f} pixels")
         print(
-            f"[poisson_disk] Circle radius: {point_radius:.1f} pixels (gap: {min_dist - 2*point_radius:.1f})"
+            f"[poisson_disk] Circle radius: {point_radius:.1f} pixels (multiplier: {radius_multiplier})"
         )
 
     # Convert points to circle shapes with INTEGER coordinates
@@ -276,6 +322,7 @@ def generate(
                 "fill": _sample_image_color(input_image, x, y, width, height),
                 "stroke": "none",
                 "stroke_width": 0,
+                "opacity": opacity,  # Pass opacity to shape
             }
         )
 
@@ -298,6 +345,7 @@ def generate(
                 "fill": "rgb(128,128,128)",
                 "stroke": "none",
                 "stroke_width": 0,
+                "opacity": opacity,  # Pass opacity to cascade shapes too
             }
 
         enhanced_shapes = apply_universal_cascade_fill(
