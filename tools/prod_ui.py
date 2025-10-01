@@ -1,4 +1,4 @@
-# tools/prod_ui.py - Phase 2: Dynamic Parameter UI with Metadata Display
+# tools/prod_ui.py - Phase 2: Hybrid Subdivision UI
 from __future__ import annotations
 
 import json
@@ -31,6 +31,14 @@ except ImportError as e:
     print(f"[prod_ui] Using empty parameter definitions")
     def get_factory_defaults(geometry):
         return {}
+
+# Import hybrid subdivision system
+try:
+    from hybrid_subdivision import MaskBasedSubdivision
+    print(f"[prod_ui] Successfully loaded hybrid subdivision system")
+except ImportError as e:
+    print(f"[prod_ui] WARNING: Could not import hybrid_subdivision: {e}")
+    MaskBasedSubdivision = None
 
 # Add missing imports
 try:
@@ -131,6 +139,8 @@ def _load_prefs() -> Dict[str, Any]:
 
     return {
         "input_image": default_input,
+        "mask_image": "",
+        "background_image": "",
         "points": 500,
         "seed": 42,
         "export_svg": True,
@@ -140,6 +150,8 @@ def _load_prefs() -> Dict[str, Any]:
         "geoms": GEOMS[:3],
         "fill_methods": ["default"],
         "geometry_parameters": geom_params,
+        "hybrid_mode": False,
+        "region_assignments": {}
     }
 
 
@@ -271,8 +283,12 @@ def _run_batch(
     geometry_parameters: Dict[str, Dict[str, float]],
     auto_open: bool,
     verbose: bool = False,
+    hybrid_mode: bool = False,
+    mask_image: str = "",
+    background_image: str = "",
+    region_assignments: Dict = None,
 ) -> None:
-    """Enhanced batch runner with parameter support"""
+    """Enhanced batch runner with hybrid subdivision support"""
     global BUSY
     try:
         BUSY = True
@@ -293,6 +309,13 @@ def _run_batch(
         _log(f"Starting batch with {len(geoms)} geometries × {len(fill_methods)} fill methods")
         _log(f"Fill methods: {', '.join(fill_methods)}")
         _log(f"Input image: {resolved_input}")
+        
+        if hybrid_mode:
+            _log(f"HYBRID MODE ENABLED", "warning")
+            if mask_image:
+                _log(f"Mask image: {mask_image}")
+            if background_image:
+                _log(f"Background image: {background_image}")
 
         results = []
         successful = 0
@@ -525,7 +548,7 @@ def _generate_comparison_gallery(
                     # Count shapes from metadata
                     shapes = svg_metadata.get('actual_shapes', 'unknown')
 
-                    # Format metadata for display - make it prominent
+                    # Format metadata for display
                     metadata_display = ""
                     if svg_metadata:
                         meta_lines = []
@@ -698,7 +721,7 @@ def index():
     geom_params_json = json.dumps(GEOMETRY_PARAMETERS)
     
     return Response(render_template_string("""
-<!doctype html><html><head><meta charset="utf-8"><title>Cubist Production UI v2.5</title>
+<!doctype html><html><head><meta charset="utf-8"><title>Cubist Production UI v2.6</title>
 <style>
 body{font-family:system-ui,Arial;margin:18px;background-color:#f8f9fa}
 .card{background:white;padding:20px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);margin-bottom:20px}
@@ -740,9 +763,19 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
 .param-slider{flex:1;min-width:150px}
 .param-text{width:70px;padding:4px 6px;border:1px solid #ddd;border-radius:3px;text-align:right;font-size:13px}
 .param-text.invalid{border-color:#dc3545;background:#fee}
+
+.hybrid-section{background:#fff3cd;padding:15px;border-radius:6px;border:2px solid #ffc107;margin-bottom:15px}
+.hybrid-toggle{display:flex;align-items:center;margin-bottom:15px}
+.hybrid-toggle input[type=checkbox]{margin-right:10px;transform:scale(1.3)}
+.hybrid-toggle label{font-size:16px;font-weight:bold;color:#856404}
+.hybrid-controls{display:none;padding:15px;background:white;border-radius:6px;margin-top:10px}
+.hybrid-controls.active{display:block}
+.mask-preview{max-width:200px;max-height:150px;border:1px solid #ddd;border-radius:4px;margin-top:8px}
+.region-row{display:flex;align-items:center;gap:10px;padding:8px;background:#f8f9fa;border-radius:4px;margin-bottom:8px}
+.region-color{width:30px;height:30px;border:1px solid #ddd;border-radius:4px}
 </style>
 </head><body>
-<h1>Cubist Art — Production UI v2.5.0</h1>
+<h1>Cubist Art — Production UI v2.6.0 - Phase 2</h1>
 
 <div class="card">
   <h3>Input Configuration</h3>
@@ -751,9 +784,9 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
     <input id="input_image" type="text" placeholder="filename or absolute path"/>
     <div style="margin-top:6px">
       <select id="input_files_select" style="max-width:420px"></select>
-      <button class="button" onclick="useSelected()">Use selected</button>
+      <button class="button" onclick="useSelected('input')">Use selected</button>
       <input id="file_input" type="file" style="margin-left:8px"/>
-      <button class="button" onclick="uploadFile()">Upload</button>
+      <button class="button" onclick="uploadFile('input')">Upload</button>
     </div>
     <div style="margin-top:8px">
       <img id="input_preview" class="preview" src="" style="display:none"/>
@@ -766,6 +799,51 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
     <input id="points" type="text" class="points-input" placeholder="e.g. 500" min="1" max="50000"/>
     <span style="color:#666;font-size:12px">Enter number of shapes (1-50000)</span>
     <div id="points-error" class="error" style="display:none"></div>
+  </div>
+</div>
+
+<div class="card hybrid-section">
+  <div class="hybrid-toggle">
+    <input type="checkbox" id="hybrid_mode"/>
+    <label for="hybrid_mode">Enable Hybrid Multi-Geometry Mode</label>
+  </div>
+  <div style="font-size:13px;color:#856404;margin-bottom:10px">
+    Combine multiple geometries using mask-based regions (subject vs background)
+  </div>
+  
+  <div id="hybrid_controls" class="hybrid-controls">
+    <div class="row">
+      <label><strong>Mask Image</strong> (defines subject vs background)</label><br/>
+      <small style="color:#666">Dark areas (0-127) = Subject | Light areas (128-255) = Background</small><br/>
+      <select id="mask_files_select" style="max-width:420px;margin-top:6px"></select>
+      <button class="button secondary" onclick="useSelected('mask')">Use selected</button>
+      <input id="mask_file_input" type="file" style="margin-left:8px"/>
+      <button class="button secondary" onclick="uploadFile('mask')">Upload</button>
+      <div style="margin-top:8px">
+        <img id="mask_preview" class="mask-preview" src="" style="display:none"/>
+        <div id="mask_info" style="font-size:12px;color:#666;margin-top:4px"></div>
+      </div>
+    </div>
+    
+    <div class="row">
+      <label><strong>Background Image</strong> (optional - for background color source)</label><br/>
+      <small style="color:#666">If not provided, background samples from input image</small><br/>
+      <select id="background_files_select" style="max-width:420px;margin-top:6px"></select>
+      <button class="button secondary" onclick="useSelected('background')">Use selected</button>
+      <input id="background_file_input" type="file" style="margin-left:8px"/>
+      <button class="button secondary" onclick="uploadFile('background')">Upload</button>
+      <div style="margin-top:8px">
+        <img id="background_preview" class="preview" src="" style="display:none"/>
+      </div>
+    </div>
+    
+    <div id="region_assignments" style="margin-top:15px;display:none">
+      <h4>Region Assignments</h4>
+      <div style="font-size:12px;color:#666;margin-bottom:10px">
+        Assign different geometries to subject and background
+      </div>
+      <div id="region_list"></div>
+    </div>
   </div>
 </div>
 
@@ -821,6 +899,62 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
 <script>
 const geoms = {{ geoms_json|safe }};
 const GEOMETRY_PARAMETERS = {{ geom_params_json|safe }};
+
+// Hybrid mode toggle
+document.getElementById('hybrid_mode').addEventListener('change', function() {
+  const controls = document.getElementById('hybrid_controls');
+  if (this.checked) {
+    controls.classList.add('active');
+  } else {
+    controls.classList.remove('active');
+  }
+  savePrefs();
+});
+
+// Mask upload triggers region detection
+document.getElementById('mask_file_input').addEventListener('change', async function() {
+  if (this.files && this.files[0]) {
+    const formData = new FormData();
+    formData.append('file', this.files[0]);
+    const response = await fetch('/upload?type=mask', {method: 'POST', body: formData});
+    const result = await response.json();
+    
+    if (result.filename) {
+      document.getElementById('mask_files_select').value = result.filename;
+      await useSelected('mask');
+      
+      // Detect regions
+      if (result.regions) {
+        showRegionAssignments(result.regions);
+      }
+    }
+  }
+});
+
+function showRegionAssignments(regions) {
+  const container = document.getElementById('region_assignments');
+  const list = document.getElementById('region_list');
+  
+  list.innerHTML = '';
+  
+  regions.forEach(region => {
+    const row = document.createElement('div');
+    row.className = 'region-row';
+    row.innerHTML = `
+      <div class="region-color" style="background:rgb(${region.value},${region.value},${region.value})"></div>
+      <strong>Region ${region.value}</strong>
+      <span>(${region.percentage}% of canvas)</span>
+      <select class="region-geometry" data-region="${region.value}">
+        ${geoms.map(g => `<option value="${g}">${g}</option>`).join('')}
+      </select>
+      <input type="number" class="points-input" placeholder="shapes" value="${Math.round(region.percentage * 5)}" 
+             data-region="${region.value}" style="width:80px"/>
+    `;
+    list.appendChild(row);
+  });
+  
+  container.style.display = 'block';
+}
 
 function createGeometryCard(geom, defaultChecked) {
   const params = GEOMETRY_PARAMETERS[geom];
@@ -1017,46 +1151,78 @@ async function loadInputFiles(){
   try{
     const res = await fetch('/input_files');
     const files = await res.json();
-    const sel = document.getElementById('input_files_select');
-    sel.innerHTML = '';
-    files.forEach(f=>{
-      const o = document.createElement('option'); o.value = f; o.text = f; sel.appendChild(o);
+    
+    // Populate all three selectors
+    ['input', 'mask', 'background'].forEach(type => {
+      const sel = document.getElementById(`${type}_files_select`);
+      sel.innerHTML = '';
+      files.forEach(f=>{
+        const o = document.createElement('option'); 
+        o.value = f; 
+        o.text = f; 
+        sel.appendChild(o);
+      });
     });
   }catch(e){ console.warn(e); }
 }
 
-function setInputPreview(path){
-  const img = document.getElementById('input_preview');
-  const link = document.getElementById('open_input_link');
-  if(!path){ img.style.display='none'; img.src=''; link.style.display='none'; return; }
+function setInputPreview(path, type='input'){
+  const img = document.getElementById(`${type}_preview`);
+  const link = document.getElementById(`open_${type}_link`);
+  
+  if(!path){ 
+    img.style.display='none'; 
+    img.src=''; 
+    if(link) link.style.display='none'; 
+    return; 
+  }
+  
   const url = '/preview?file=' + encodeURIComponent(path);
-  img.src = url; img.style.display = 'inline-block'; link.href = url; link.style.display='inline';
+  img.src = url; 
+  img.style.display = 'inline-block'; 
+  if(link) {
+    link.href = url; 
+    link.style.display='inline';
+  }
 }
 
-function useSelected(){
-  const sel = document.getElementById('input_files_select');
+function useSelected(type){
+  const sel = document.getElementById(`${type}_files_select`);
   if(!sel.value) return;
-  document.getElementById('input_image').value = sel.value;
-  setInputPreview(sel.value);
+  
+  if (type === 'input') {
+    document.getElementById('input_image').value = sel.value;
+  }
+  
+  setInputPreview(sel.value, type);
   savePrefs();
 }
 
-async function uploadFile(){
-  const inp = document.getElementById('file_input');
+async function uploadFile(type){
+  const inp = document.getElementById(`${type === 'input' ? 'file_input' : type + '_file_input'}`);
   if(!inp.files || inp.files.length===0){ alert('Select file'); return; }
-  const fd = new FormData(); fd.append('file', inp.files[0]);
-  const r = await fetch('/upload',{method:'POST', body:fd});
+  
+  const fd = new FormData(); 
+  fd.append('file', inp.files[0]);
+  const r = await fetch(`/upload?type=${type}`,{method:'POST', body:fd});
   const j = await r.json();
+  
   if(r.ok && j.filename){
     await loadInputFiles();
-    document.getElementById('input_files_select').value = j.filename;
-    useSelected();
+    document.getElementById(`${type}_files_select`).value = j.filename;
+    await useSelected(type);
+    
+    // If mask uploaded, detect regions
+    if (type === 'mask' && j.regions) {
+      showRegionAssignments(j.regions);
+    }
   } else {
     alert('Upload failed: ' + (j.error || 'unknown'));
   }
 }
 
 function clearLog(){ document.getElementById('log').innerHTML = ''; }
+
 function copyLog(){
   navigator.clipboard.writeText(document.getElementById('log').innerText).then(
     ()=>{ alert('Log copied') },
@@ -1069,17 +1235,40 @@ function getSelectedFillMethods() {
   return Array.from(checkboxes).map(cb => cb.value);
 }
 
+function getRegionAssignments() {
+  const assignments = {};
+  
+  document.querySelectorAll('.region-geometry').forEach(select => {
+    const region = select.dataset.region;
+    const geometry = select.value;
+    const pointsInput = document.querySelector(`input[data-region="${region}"]`);
+    const points = parseInt(pointsInput.value) || 100;
+    
+    assignments[region] = {
+      geometry: geometry,
+      target_count: points,
+      params: getGeometryParameters()[geometry] || {}
+    };
+  });
+  
+  return assignments;
+}
+
 async function savePrefs(obj){
   try{
     const pointsValidation = validatePoints(document.getElementById('points').value);
     const base = {
       input_image: document.getElementById('input_image').value,
+      mask_image: document.getElementById('mask_files_select')?.value || '',
+      background_image: document.getElementById('background_files_select')?.value || '',
       points: pointsValidation.valid ? pointsValidation.value : 500,
       geoms: Array.from(geoms).filter(g=>document.getElementById('geom_'+g).checked),
       auto_open_gallery: document.getElementById('auto_open').checked,
       verbose_probe: document.getElementById('verbose').checked,
       fill_methods: getSelectedFillMethods(),
-      geometry_parameters: getGeometryParameters()
+      geometry_parameters: getGeometryParameters(),
+      hybrid_mode: document.getElementById('hybrid_mode').checked,
+      region_assignments: getRegionAssignments()
     };
     const payload = Object.assign(base, obj||{});
     await fetch('/save_prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -1104,11 +1293,17 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     const p = await (await fetch('/prefs')).json();
     if(p.input_image) document.getElementById('input_image').value = p.input_image;
     if(p.points) document.getElementById('points').value = p.points;
+    
     if(Array.isArray(p.geoms)){
-      geoms.forEach(g=>{ const el=document.getElementById('geom_'+g); if(el) el.checked = p.geoms.includes(g); });
+      geoms.forEach(g=>{ 
+        const el=document.getElementById('geom_'+g); 
+        if(el) el.checked = p.geoms.includes(g); 
+      });
     }
+    
     document.getElementById('auto_open').checked = p.auto_open_gallery !== false;
     document.getElementById('verbose').checked = !!(p.verbose_probe || p.verbose);
+    document.getElementById('hybrid_mode').checked = !!p.hybrid_mode;
 
     if(Array.isArray(p.fill_methods)){
       p.fill_methods.forEach(method => {
@@ -1133,7 +1328,20 @@ document.addEventListener('DOMContentLoaded', async ()=>{
       });
     }
 
-    setInputPreview(p.input_image || '');
+    setInputPreview(p.input_image || '', 'input');
+    
+    if(p.mask_image) {
+      setInputPreview(p.mask_image, 'mask');
+    }
+    
+    if(p.background_image) {
+      setInputPreview(p.background_image, 'background');
+    }
+    
+    if(p.hybrid_mode) {
+      document.getElementById('hybrid_controls').classList.add('active');
+    }
+    
     updatePointsValidation();
     
     geoms.forEach(geom => {
@@ -1161,6 +1369,28 @@ async function runBatch(){
 
   const fillMethods = getSelectedFillMethods();
   if(fillMethods.length===0){ alert('Select at least one fill method'); return; }
+  
+  const hybridMode = document.getElementById('hybrid_mode').checked;
+  let maskImage = '';
+  let backgroundImage = '';
+  let regionAssignments = {};
+  
+  if (hybridMode) {
+    maskImage = document.getElementById('mask_files_select')?.value || '';
+    backgroundImage = document.getElementById('background_files_select')?.value || '';
+    
+    if (!maskImage) {
+      alert('Hybrid mode requires a mask image');
+      return;
+    }
+    
+    regionAssignments = getRegionAssignments();
+    
+    if (Object.keys(regionAssignments).length === 0) {
+      alert('Hybrid mode requires region assignments');
+      return;
+    }
+  }
 
   let hasInvalidParams = false;
   geoms.forEach(geom => {
@@ -1187,7 +1417,11 @@ async function runBatch(){
     fill_methods: fillMethods,
     geometry_parameters: getGeometryParameters(),
     auto_open: document.getElementById('auto_open').checked,
-    verbose: document.getElementById('verbose').checked
+    verbose: document.getElementById('verbose').checked,
+    hybrid_mode: hybridMode,
+    mask_image: maskImage,
+    background_image: backgroundImage,
+    region_assignments: regionAssignments
   };
 
   await fetch('/run_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -1256,15 +1490,41 @@ def preview():
 def upload():
     try:
         f = request.files.get("file")
+        upload_type = request.args.get("type", "input")
+        
         if not f or f.filename == "":
             return jsonify({"error": "no file"}), 400
+        
         dest = ROOT / "input"
         dest.mkdir(parents=True, exist_ok=True)
         filename = Path(f.filename).name
         out = dest / filename
         f.save(str(out))
-        _log(f"Uploaded input file: {out}", "success")
-        return jsonify({"ok": True, "filename": filename})
+        
+        _log(f"Uploaded {upload_type} file: {out}", "success")
+        
+        # If mask uploaded, detect regions
+        regions = None
+        if upload_type == "mask" and Image:
+            try:
+                mask_img = Image.open(out).convert('L')
+                from collections import Counter
+                pixel_counts = Counter(mask_img.getdata())
+                total_pixels = mask_img.size[0] * mask_img.size[1]
+                
+                regions = []
+                for value, count in sorted(pixel_counts.items(), key=lambda x: -x[1])[:10]:
+                    percentage = (count / total_pixels) * 100
+                    if percentage > 1.0:  # Only show regions > 1%
+                        regions.append({
+                            'value': value,
+                            'count': count,
+                            'percentage': round(percentage, 1)
+                        })
+            except Exception as e:
+                _log(f"Could not detect regions: {e}", "warning")
+        
+        return jsonify({"ok": True, "filename": filename, "regions": regions})
     except Exception as e:
         _log(f"Upload failed: {e}", "error")
         return jsonify({"error": str(e)}), 500
@@ -1306,6 +1566,10 @@ def run_batch():
             data.get("geometry_parameters", {}),
             bool(data.get("auto_open", True)),
             bool(data.get("verbose", False)),
+            bool(data.get("hybrid_mode", False)),
+            data.get("mask_image", ""),
+            data.get("background_image", ""),
+            data.get("region_assignments", {})
         ),
         daemon=True,
     )
@@ -1335,7 +1599,7 @@ def prefs():
 
 
 if __name__ == "__main__":
-    print("Cubist Production UI v2.5.0 - Metadata Integration Complete")
+    print("Cubist Production UI v2.6.0 - Phase 2: Hybrid Subdivision")
     print("Server running at http://127.0.0.1:5123")
     try:
         app.run(host="127.0.0.1", port=5123, debug=False)
