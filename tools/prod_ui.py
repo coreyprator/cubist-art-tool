@@ -155,6 +155,7 @@ def _load_prefs() -> Dict[str, Any]:
     }
 
 
+
 def _save_prefs(prefs: Dict[str, Any]) -> None:
     PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
     PREFS_PATH.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
@@ -273,7 +274,6 @@ def _run_single_geometry(
         _log(f"✗ {geom} ({fill_method}): exception - {e}", "error")
         return False, f"✗ {geom} ({fill_method}): {e}", geometry_params or {}
 
-
 def _run_batch(
     geoms: List[str],
     input_image: str,
@@ -306,8 +306,7 @@ def _run_batch(
         except Exception:
             resolved_input = Path(input_image)
 
-        _log(f"Starting batch with {len(geoms)} geometries × {len(fill_methods)} fill methods")
-        _log(f"Fill methods: {', '.join(fill_methods)}")
+        _log(f"Starting batch generation")
         _log(f"Input image: {resolved_input}")
         
         if hybrid_mode:
@@ -316,31 +315,57 @@ def _run_batch(
                 _log(f"Mask image: {mask_image}")
             if background_image:
                 _log(f"Background image: {background_image}")
-
-        results = []
-        successful = 0
-        total_combinations = len(geoms) * len(fill_methods)
-
-        for geom in geoms:
-            geom_params = geometry_parameters.get(geom, {})
-            if geom_params and verbose:
-                _log(f"Parameters for {geom}:")
+            _log(f"Region assignments: {len(region_assignments) if region_assignments else 0} regions")
+            
+            # RUN HYBRID MODE GENERATION
+            results = []
+            successful = 0
             
             for fill_method in fill_methods:
-                success, msg, params = _run_single_geometry(
-                    geom, str(resolved_input), output_dir, points, seed, 
-                    fill_method, geom_params, verbose
+                success, msg, params = _run_hybrid_generation(
+                    input_image=str(resolved_input),
+                    mask_image=mask_image,
+                    background_image=background_image,
+                    region_assignments=region_assignments,
+                    output_dir=output_dir,
+                    seed=seed,
+                    fill_method=fill_method,
+                    verbose=verbose
                 )
-                results.append((geom, success, msg, fill_method, params))
+                results.append(("hybrid_multi", success, msg, fill_method, params))
                 if success:
                     successful += 1
+            
+            total_combinations = len(fill_methods)
+        else:
+            # ORIGINAL SINGLE GEOMETRY MODE
+            _log(f"{len(geoms)} geometries × {len(fill_methods)} fill methods")
+            _log(f"Fill methods: {', '.join(fill_methods)}")
+            
+            results = []
+            successful = 0
+            total_combinations = len(geoms) * len(fill_methods)
+
+            for geom in geoms:
+                geom_params = geometry_parameters.get(geom, {})
+                if geom_params and verbose:
+                    _log(f"Parameters for {geom}:")
+                
+                for fill_method in fill_methods:
+                    success, msg, params = _run_single_geometry(
+                        geom, str(resolved_input), output_dir, points, seed, 
+                        fill_method, geom_params, verbose
+                    )
+                    results.append((geom, success, msg, fill_method, params))
+                    if success:
+                        successful += 1
 
         # Generate comparison gallery
         _generate_comparison_gallery(output_dir, results, resolved_input, fill_methods)
 
         failed = total_combinations - successful
         if failed == 0:
-            _log(f"All {total_combinations} combinations completed successfully!", "complete")
+            _log(f"All {total_combinations} generations completed successfully!", "complete")
         elif successful > 0:
             _log(
                 f"Batch complete: {successful}/{total_combinations} successful, {failed} failed",
@@ -363,6 +388,119 @@ def _run_batch(
     finally:
         BUSY = False
 
+
+def _run_hybrid_generation(
+    input_image: str,
+    mask_image: str,
+    background_image: str,
+    region_assignments: Dict,
+    output_dir: Path,
+    seed: int,
+    fill_method: str = "default",
+    verbose: bool = False,
+) -> Tuple[bool, str, Dict[str, float]]:
+    """Run hybrid multi-geometry generation via CLI"""
+    
+    method_suffix = "_cascade" if fill_method == "cascade" else "_default"
+    hybrid_output = output_dir / f"hybrid{method_suffix}" / "frame_hybrid"
+    hybrid_output.parent.mkdir(parents=True, exist_ok=True)
+
+    # Resolve paths
+    try:
+        input_p = Path(input_image).resolve()
+        mask_p = (ROOT / "input" / mask_image).resolve() if mask_image else None
+        bg_p = (ROOT / "input" / background_image).resolve() if background_image else None
+    except Exception as e:
+        return False, f"Path resolution failed: {e}", {}
+
+    # Build CLI command
+    cmd = [
+        "python",
+        "cubist_cli.py",
+        "--input", str(input_p),
+        "--mask", str(mask_p),
+        "--output", str(hybrid_output),
+        "--seed", str(seed),
+        "--export-svg",
+    ]
+    
+    if bg_p:
+        cmd.extend(["--background", str(bg_p)])
+    
+    if fill_method == "cascade":
+        cmd.append("--cascade")
+    
+    # Add region assignments
+    for region_id, assignment in region_assignments.items():
+        geometry = assignment.get('geometry', 'rectangles')
+        target_count = assignment.get('target_count', 100)
+        params = assignment.get('params', {})
+        
+        region_spec = f"{region_id}:{geometry}:{target_count}"
+        
+        # Add parameters to region spec
+        for param_name, param_value in params.items():
+            region_spec += f":{param_name}={param_value}"
+        
+        cmd.extend(["--region", region_spec])
+    
+    if verbose:
+        cmd.append("--verbose")
+
+    _log(f"Running: hybrid ({fill_method} fill)", "info")
+    if verbose:
+        _log(f"  Regions: {len(region_assignments)}")
+    
+    start_time = time.time()
+
+    try:
+        result = subprocess.run(
+            cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=600  # 10 min timeout for hybrid
+        )
+        elapsed = time.time() - start_time
+
+        if result.stdout and verbose:
+            for ln in result.stdout.strip().splitlines():
+                _log(ln)
+        if result.stderr and (verbose or result.returncode != 0):
+            for ln in result.stderr.strip().splitlines():
+                _log(ln, "error")
+
+        if result.returncode == 0:
+            svg_path = hybrid_output.with_suffix(".svg")
+            svg_size = svg_path.stat().st_size if svg_path.exists() else 0
+            
+            shapes = "unknown"
+            try:
+                lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
+                for l in reversed(lines):
+                    s = l.strip()
+                    if s.startswith("{") and s.endswith("}"):
+                        data = json.loads(s)
+                        shapes = data.get("outputs", {}).get("svg_shapes", "unknown")
+                        break
+            except Exception:
+                pass
+
+            _log(
+                f"✓ hybrid ({fill_method}): {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)",
+                "success",
+            )
+            return True, f"✓ hybrid ({fill_method}): {shapes} shapes", {}
+        else:
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            _log(
+                f"✗ hybrid ({fill_method}): failed with rc={result.returncode} ({elapsed:.2f}s)",
+                "error",
+            )
+            return False, f"✗ hybrid ({fill_method}): failed", {}
+
+    except subprocess.TimeoutExpired:
+        _log(f"✗ hybrid ({fill_method}): timed out after 10 minutes", "error")
+        return False, f"✗ hybrid ({fill_method}): timed out", {}
+    except Exception as e:
+        _log(f"✗ hybrid ({fill_method}): exception - {e}", "error")
+        return False, f"✗ hybrid ({fill_method}): {e}", {}
 
 def _extract_svg_metadata(svg_path: Path) -> Dict[str, str]:
     """Extract XMP metadata from SVG file."""
@@ -392,7 +530,6 @@ def _extract_svg_metadata(svg_path: Path) -> Dict[str, str]:
         return metadata
     except Exception:
         return {}
-
 
 def _generate_comparison_gallery(
     output_dir: Path,
@@ -521,8 +658,16 @@ def _generate_comparison_gallery(
 
         for method in fill_methods:
             method_suffix = "_cascade" if method == "cascade" else "_default"
-            svg_path = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.svg"
-            wrapper_path = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.html"
+            
+            # CRITICAL FIX: Handle hybrid vs single geometry paths
+            if geom == "hybrid_multi":
+                svg_path = output_dir / f"hybrid{method_suffix}" / "frame_hybrid.svg"
+                wrapper_path = output_dir / f"hybrid{method_suffix}" / "frame_hybrid.html"
+                display_name = "hybrid"
+            else:
+                svg_path = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.svg"
+                wrapper_path = output_dir / f"{geom}{method_suffix}" / f"frame_{geom}.html"
+                display_name = geom
 
             if method in results_by_geom[geom]:
                 success, msg, params = results_by_geom[geom][method]
@@ -532,12 +677,18 @@ def _generate_comparison_gallery(
                     svg_metadata = _extract_svg_metadata(svg_path)
                     
                     # Create enhanced wrapper with metadata
-                    wrapper_html = create_wrapper_template(geom, method, params, svg_metadata)
+                    wrapper_html = create_wrapper_template(display_name, method, params, svg_metadata)
                     wrapper_path.parent.mkdir(parents=True, exist_ok=True)
                     wrapper_path.write_text(wrapper_html, encoding="utf-8")
 
-                    rel_wrapper = f"{geom}{method_suffix}/frame_{geom}.html"
-                    rel_svg = f"{geom}{method_suffix}/frame_{geom}.svg"
+                    # Build relative paths for gallery
+                    if geom == "hybrid_multi":
+                        rel_wrapper = f"hybrid{method_suffix}/frame_hybrid.html"
+                        rel_svg = f"hybrid{method_suffix}/frame_hybrid.svg"
+                    else:
+                        rel_wrapper = f"{geom}{method_suffix}/frame_{geom}.html"
+                        rel_svg = f"{geom}{method_suffix}/frame_{geom}.svg"
+                    
                     file_size = svg_path.stat().st_size
                     size_str = (
                         f"{file_size / 1024:.1f} KB"
@@ -576,7 +727,7 @@ def _generate_comparison_gallery(
                             {metadata_display}
                             <p><a href="{rel_wrapper}" target="_blank">view fullscreen</a> | <a href="{rel_svg}" target="_blank">raw SVG</a></p>
                             <div class="thumbnail-container" onclick="window.open('{rel_wrapper}', '_blank')">
-                                <img src="{rel_svg}" alt="{geom} {method} fill">
+                                <img src="{rel_svg}" alt="{display_name} {method} fill">
                             </div>
                         </div>
                     """)
@@ -713,7 +864,6 @@ def _generate_comparison_gallery(
     </html>
     """
     (output_dir / "index.html").write_text(html_content, encoding="utf-8")
-
 
 # ----------------- Flask routes -----------------
 @app.route("/")
@@ -1342,6 +1492,26 @@ document.addEventListener('DOMContentLoaded', async ()=>{
       document.getElementById('hybrid_controls').classList.add('active');
     }
     
+    if(p.hybrid_mode && p.mask_image) {
+      fetch('/detect_regions?file=' + encodeURIComponent(p.mask_image))
+        .then(response => response.json())
+        .then(data => {
+          if(data.regions && data.regions.length > 0) {
+            showRegionAssignments(data.regions);
+            // Restore region assignments if saved
+            if(p.region_assignments) {
+              Object.keys(p.region_assignments).forEach(regionId => {
+                const assignment = p.region_assignments[regionId];
+                const geomSelect = document.querySelector(`.region-geometry[data-region="${regionId}"]`);
+                const pointsInput = document.querySelector(`input[data-region="${regionId}"]`);
+                if(geomSelect) geomSelect.value = assignment.geometry;
+                if(pointsInput) pointsInput.value = assignment.target_count;
+              });
+            }
+          }
+        })
+        .catch(err => console.warn('Auto-detect regions failed:', err));
+    }
     updatePointsValidation();
     
     geoms.forEach(geom => {
@@ -1529,6 +1699,37 @@ def upload():
         _log(f"Upload failed: {e}", "error")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/detect_regions")
+def detect_regions():
+    """Detect regions in mask image for hybrid mode"""
+    fname = request.args.get("file", "")
+    if not fname or not Image:
+        return jsonify({"regions": []})
+    
+    try:
+        mask_path = (ROOT / "input" / fname).resolve()
+        if not mask_path.exists():
+            return jsonify({"regions": []})
+        
+        mask_img = Image.open(mask_path).convert('L')
+        from collections import Counter
+        pixel_counts = Counter(mask_img.getdata())
+        total_pixels = mask_img.size[0] * mask_img.size[1]
+        
+        regions = []
+        for value, count in sorted(pixel_counts.items(), key=lambda x: -x[1])[:10]:
+            percentage = (count / total_pixels) * 100
+            if percentage > 1.0:  # Only show regions > 1%
+                regions.append({
+                    'value': value,
+                    'count': count,
+                    'percentage': round(percentage, 1)
+                })
+        
+        return jsonify({"regions": regions})
+    except Exception as e:
+        return jsonify({"regions": [], "error": str(e)})
+    
 
 @app.route("/save_prefs", methods=["POST"])
 def save_prefs():
