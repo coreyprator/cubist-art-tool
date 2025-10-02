@@ -5,6 +5,10 @@ Cubist Art v2.6.0 - Phase 2 Priority 1
 
 Enables combining multiple geometries in a single artwork using mask-based regions.
 Supports optional background image for compositional control.
+
+MASK CONVENTION (Industry Standard):
+- White/light areas (128-255) = Subject/Foreground
+- Black/dark areas (0-127) = Background
 """
 
 from __future__ import annotations
@@ -39,6 +43,10 @@ class MaskBasedSubdivision:
     - Input image: Primary color source (typically the subject)
     - Mask image: Defines regions (grayscale, 0-255)
     - Background image: Optional secondary color source for background regions
+    
+    MASK CONVENTION (Industry Standard):
+    - White/light areas (128-255) = Subject/Foreground (samples from input_image)
+    - Black/dark areas (0-127) = Background (samples from background_image if provided)
     """
     
     def __init__(
@@ -54,7 +62,7 @@ class MaskBasedSubdivision:
         
         Args:
             canvas_size: (width, height) in pixels
-            input_image: PIL Image - primary color source
+            input_image: PIL Image - primary color source (subject)
             mask_image: PIL Image - grayscale region mask (None = single region)
             background_image: PIL Image - optional background color source
             verbose: Enable debug logging
@@ -132,6 +140,10 @@ class MaskBasedSubdivision:
         """
         Sample color from appropriate image based on mask region.
         
+        MASK CONVENTION:
+        - Light values (>= 128) = Subject, sample from input_image
+        - Dark values (< 128) = Background, sample from background_image (or input_image if not provided)
+        
         Args:
             x, y: Position on canvas
             
@@ -151,12 +163,15 @@ class MaskBasedSubdivision:
         # Sample mask to determine region
         mask_value = self.mask.getpixel((x, y))
         
-        # Dark values (< 128) = subject, use input image
-        # Light values (>= 128) = background, use background image if available
-        if mask_value < 128:
+        # INDUSTRY STANDARD CONVENTION:
+        # Light values (>= 128) = subject, use input image
+        # Dark values (< 128) = background, use background image if available
+        if mask_value >= 128:
+            # Subject region - use input image
             if self.input_image:
                 return sample_image_color(self.input_image, x, y, self.width, self.height)
         else:
+            # Background region - use background image if provided, else input image
             if self.background_image:
                 return sample_image_color(self.background_image, x, y, self.width, self.height)
             elif self.input_image:
@@ -343,6 +358,8 @@ def create_simple_binary_mask(width: int, height: int, threshold: float = 0.5) -
     """
     Create a simple binary mask for testing (subject in center).
     
+    USES INDUSTRY STANDARD: White = subject, Black = background
+    
     Args:
         width, height: Canvas dimensions
         threshold: Radius threshold (0-1) for subject region
@@ -353,9 +370,9 @@ def create_simple_binary_mask(width: int, height: int, threshold: float = 0.5) -
     if not Image:
         return None
     
-    mask = Image.new('L', (width, height), 255)  # White background
+    mask = Image.new('L', (width, height), 0)  # Black background
     
-    # Create circular subject region in center
+    # Create circular subject region in center (white)
     center_x, center_y = width // 2, height // 2
     radius = min(width, height) * threshold
     
@@ -363,7 +380,7 @@ def create_simple_binary_mask(width: int, height: int, threshold: float = 0.5) -
         for x in range(width):
             dist = ((x - center_x) ** 2 + (y - center_y) ** 2) ** 0.5
             if dist < radius:
-                mask.putpixel((x, y), 0)  # Black subject
+                mask.putpixel((x, y), 255)  # White subject
     
     return mask
 
@@ -384,7 +401,7 @@ if __name__ == "__main__":
             for x in range(canvas_size[0]):
                 input_img.putpixel((x, y), (x % 256, y % 256, 128))
         
-        # Create simple mask (circle in center)
+        # Create simple mask (circle in center) - WHITE = subject
         mask_img = create_simple_binary_mask(*canvas_size, threshold=0.3)
         
         # Test subdivision
@@ -395,14 +412,14 @@ if __name__ == "__main__":
             verbose=True
         )
         
-        # Test region assignments
+        # Test region assignments with corrected convention
         assignments = {
-            0: {  # Subject (black in mask)
+            255: {  # Subject (white in mask) - CORRECTED
                 'geometry': 'rectangles',
                 'target_count': 300,
                 'params': {}
             },
-            255: {  # Background (white in mask)
+            0: {  # Background (black in mask) - CORRECTED
                 'geometry': 'poisson_disk',
                 'target_count': 500,
                 'params': {}

@@ -1,6 +1,8 @@
 {
   "input_image": "G:\\My Drive\\Code\\Python\\cubist_art\\input\\x_your_input_image.jpg",
-  "points": 2000,
+  "mask_image": "edge_mask.png",
+  "background_image": "bg_your_input_image.jpg",
+  "points": 4000,
   "seed": 42,
   "export_svg": true,
   "enable_plugin_exec": true,
@@ -24,28 +26,49 @@
       "aspect_ratio_variance": 4,
       "overlap_tolerance": -3,
       "cascade_intensity": 0.8,
-      "opacity": 0.7
+      "opacity": 1
     },
     "delaunay": {
       "cascade_intensity": 0.8,
-      "opacity": 0.7
+      "opacity": 1
     },
     "voronoi": {
       "cascade_intensity": 0.8,
-      "opacity": 0.7
+      "opacity": 1
     },
     "poisson_disk": {
       "min_dist_factor": 0.025,
       "radius_multiplier": 1,
       "cascade_intensity": 0.8,
-      "opacity": 0.7
+      "opacity": 1
     },
     "scatter_circles": {
       "min_dist_factor": 0.008,
       "radius_multiplier": 1,
       "jitter": 0.25,
       "cascade_intensity": 0.8,
-      "opacity": 0.7
+      "opacity": 1
+    }
+  },
+  "hybrid_mode": true,
+  "region_assignments": {
+    "0": {
+      "geometry": "poisson_disk",
+      "target_count": 4000,
+      "params": {
+        "min_dist_factor": 0.025,
+        "radius_multiplier": 1,
+        "cascade_intensity": 0.8,
+        "opacity": 1
+      }
+    },
+    "255": {
+      "geometry": "voronoi",
+      "target_count": 4000,
+      "params": {
+        "cascade_intensity": 0.8,
+        "opacity": 1
+      }
     }
   },
   "auto_open": true,

@@ -964,7 +964,7 @@ select{padding:8px;border:1px solid #ddd;border-radius:4px}
   <div id="hybrid_controls" class="hybrid-controls">
     <div class="row">
       <label><strong>Mask Image</strong> (defines subject vs background)</label><br/>
-      <small style="color:#666">Dark areas (0-127) = Subject | Light areas (128-255) = Background</small><br/>
+      <small style="color:#666">White/light areas (128-255) = Subject | Black/dark areas (0-127) = Background</small><br/>
       <select id="mask_files_select" style="max-width:420px;margin-top:6px"></select>
       <button class="button secondary" onclick="useSelected('mask')">Use selected</button>
       <input id="mask_file_input" type="file" style="margin-left:8px"/>
@@ -1481,37 +1481,52 @@ document.addEventListener('DOMContentLoaded', async ()=>{
     setInputPreview(p.input_image || '', 'input');
     
     if(p.mask_image) {
+      document.getElementById('mask_files_select').value = p.mask_image;
       setInputPreview(p.mask_image, 'mask');
     }
     
     if(p.background_image) {
+      document.getElementById('background_files_select').value = p.background_image;
       setInputPreview(p.background_image, 'background');
     }
     
     if(p.hybrid_mode) {
       document.getElementById('hybrid_controls').classList.add('active');
-    }
-    
-    if(p.hybrid_mode && p.mask_image) {
-      fetch('/detect_regions?file=' + encodeURIComponent(p.mask_image))
-        .then(response => response.json())
-        .then(data => {
+      
+      // AUTO-LOAD REGION UI FIX: Detect regions and restore assignments
+      if(p.mask_image) {
+        try {
+          const response = await fetch('/detect_regions?file=' + encodeURIComponent(p.mask_image));
+          const data = await response.json();
+          
           if(data.regions && data.regions.length > 0) {
             showRegionAssignments(data.regions);
-            // Restore region assignments if saved
-            if(p.region_assignments) {
-              Object.keys(p.region_assignments).forEach(regionId => {
-                const assignment = p.region_assignments[regionId];
-                const geomSelect = document.querySelector(`.region-geometry[data-region="${regionId}"]`);
-                const pointsInput = document.querySelector(`input[data-region="${regionId}"]`);
-                if(geomSelect) geomSelect.value = assignment.geometry;
-                if(pointsInput) pointsInput.value = assignment.target_count;
-              });
+            
+            // Restore saved region assignments
+            if(p.region_assignments && Object.keys(p.region_assignments).length > 0) {
+              // Wait for DOM to update
+              setTimeout(() => {
+                Object.keys(p.region_assignments).forEach(regionId => {
+                  const assignment = p.region_assignments[regionId];
+                  const geomSelect = document.querySelector(`.region-geometry[data-region="${regionId}"]`);
+                  const pointsInput = document.querySelector(`input.points-input[data-region="${regionId}"]`);
+                  
+                  if(geomSelect && assignment.geometry) {
+                    geomSelect.value = assignment.geometry;
+                  }
+                  if(pointsInput && assignment.target_count) {
+                    pointsInput.value = assignment.target_count;
+                  }
+                });
+              }, 100);
             }
           }
-        })
-        .catch(err => console.warn('Auto-detect regions failed:', err));
+        } catch(err) {
+          console.warn('Auto-detect regions failed:', err);
+        }
+      }
     }
+    
     updatePointsValidation();
     
     geoms.forEach(geom => {
