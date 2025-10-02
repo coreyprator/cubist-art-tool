@@ -1,7 +1,7 @@
 # hybrid_subdivision.py
 """
 Hybrid Subdivision System - Mask-Based Multi-Geometry Composition
-Cubist Art v2.6.0 - Phase 2 Priority 1
+Cubist Art v2.6.0 - Phase 2 Sprint 1
 
 Enables combining multiple geometries in a single artwork using mask-based regions.
 Supports optional background image for compositional control.
@@ -205,7 +205,7 @@ class MaskBasedSubdivision:
         region_assignments: Dict[int, Dict[str, Any]],
         seed: int = 42,
         cascade_fill_enabled: bool = True
-    ) -> List[Dict]:
+    ) -> Dict[str, Any]:
         """
         Generate multi-geometry artwork based on region assignments.
         
@@ -222,7 +222,10 @@ class MaskBasedSubdivision:
             cascade_fill_enabled: Apply cascade fill after base generation
             
         Returns:
-            List of shape dictionaries for SVG export
+            Dict with:
+            - 'shapes': List of all shapes
+            - 'regions': Dict mapping region_id to list of shapes in that region
+            - 'metadata': Generation metadata
         """
         if self.verbose:
             print(f"[hybrid_subdivision] Generating hybrid artwork")
@@ -231,7 +234,8 @@ class MaskBasedSubdivision:
         # Load geometry plugins
         geometries = load_geometry_plugins()
         
-        # Generate shapes for each region
+        # Track shapes by region for layer grouping
+        shapes_by_region = {}  # region_id -> list of shapes
         all_base_shapes = []
         total_target = 0
         
@@ -271,8 +275,13 @@ class MaskBasedSubdivision:
                     if shape_center and self.is_position_in_region(*shape_center, region_id):
                         # Update color based on mask-aware sampling
                         shape['fill'] = self.get_color_for_position(*shape_center)
+                        # Add region metadata to shape
+                        shape['region_id'] = region_id
+                        shape['region_geometry'] = geometry_name
                         filtered_shapes.append(shape)
                 
+                # Store by region for layer grouping
+                shapes_by_region[region_id] = filtered_shapes
                 all_base_shapes.extend(filtered_shapes)
                 
                 if self.verbose:
@@ -288,6 +297,7 @@ class MaskBasedSubdivision:
         
         # Apply cascade fill to entire canvas if enabled
         final_shapes = all_base_shapes
+        cascade_shapes = []
         
         if cascade_fill_enabled and len(all_base_shapes) < total_target:
             if self.verbose:
@@ -327,6 +337,13 @@ class MaskBasedSubdivision:
                 center = self._get_shape_center(shape)
                 if center:
                     shape['fill'] = self.get_color_for_position(*center)
+                    # Determine which region this cascade shape belongs to
+                    for region_id in shapes_by_region.keys():
+                        if self.is_position_in_region(*center, region_id):
+                            shape['region_id'] = region_id
+                            shape['region_geometry'] = 'cascade_fill'
+                            shapes_by_region[region_id].append(shape)
+                            break
             
             final_shapes = enhanced_shapes
             
@@ -336,7 +353,18 @@ class MaskBasedSubdivision:
         if self.verbose:
             print(f"[hybrid_subdivision] Final shape count: {len(final_shapes)}")
         
-        return final_shapes
+        # Return structured data for layer grouping
+        return {
+            'shapes': final_shapes,
+            'regions': shapes_by_region,
+            'metadata': {
+                'total_shapes': len(final_shapes),
+                'base_shapes': len(all_base_shapes),
+                'cascade_shapes': len(cascade_shapes),
+                'regions': list(shapes_by_region.keys()),
+                'region_counts': {rid: len(shapes) for rid, shapes in shapes_by_region.items()}
+            }
+        }
     
     def _get_shape_center(self, shape: Dict) -> Optional[Tuple[float, float]]:
         """Get center point of any shape type."""
@@ -427,6 +455,6 @@ if __name__ == "__main__":
         }
         
         print("\nGenerating hybrid artwork...")
-        shapes = subdivision.generate_hybrid_artwork(assignments, seed=42)
-        print(f"Generated {len(shapes)} total shapes")
+        result = subdivision.generate_hybrid_artwork(assignments, seed=42)
+        print(f"Generated {result['metadata']['total_shapes']} total shapes")
         print("Test complete!")

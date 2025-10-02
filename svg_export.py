@@ -1,212 +1,283 @@
-#!/usr/bin/env python3
+# svg_export.py
 """
-SVG Export System with Metadata Integration
-Provides export_svg function with Adobe XMP-compatible metadata embedding.
+SVG Export with XMP Metadata and Layer Grouping
+Cubist Art v2.6.0 - Phase 2 Sprint 1
+
+Exports shapes to SVG format with Adobe XMP metadata and optional layer grouping by region.
 """
 
-# Import metadata system
+import logging
+from pathlib import Path
+from datetime import datetime
+from typing import List, Dict, Any, Optional
+
+# Import version info
 try:
-    from svg_metadata import generate_xmp_metadata
+    from version import METADATA_TOOL_NAME, VERSION
 except ImportError:
-    generate_xmp_metadata = None
+    METADATA_TOOL_NAME = "Cubist Art Tool"
+    VERSION = "2.6.0"
 
-
-def _to_rgb_string(val):
-    """Normalize color spec to CSS rgb(r,g,b) or pass-through strings."""
-    if val is None:
-        return None
-    if isinstance(val, (list, tuple)) and len(val) >= 3:
-        try:
-            r, g, b = int(val[0]), int(val[1]), int(val[2])
-            return f"rgb({r},{g},{b})"
-        except Exception:
-            return str(val)
-    if isinstance(val, str):
-        s = val.strip()
-        if s.startswith("(") and s.endswith(")"):
-            parts = s[1:-1].split(",")
-            if len(parts) >= 3:
-                try:
-                    r, g, b = [int(float(p.strip())) for p in parts[:3]]
-                    return f"rgb({r},{g},{b})"
-                except Exception:
-                    pass
-        return s
-    return str(val)
-
-
-def export_svg(
-    shapes,
-    width=800,
-    height=600,
-    background="white",
-    metadata=None
-):
-    """
-    Export shapes to SVG format with optional metadata embedding.
-
-    Args:
-        shapes: List of shape dictionaries
-        width, height: Canvas dimensions
-        background: Background color
-        metadata: Optional metadata dictionary with keys:
-            - geometry: str
-            - fill_method: str
-            - input_source: str
-            - target_shapes: int
-            - seed: int
-            - generation_time: float
-            - parameters: Dict[str, float]
-
-    Returns:
-        str: SVG content as string
-    """
-
-    svg_parts = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">',
-    ]
-    
-    # Add metadata if provided and metadata system available
-    if metadata and generate_xmp_metadata:
-        try:
-            xmp_metadata = generate_xmp_metadata(
-                geometry=metadata.get("geometry", "unknown"),
-                fill_method=metadata.get("fill_method", "default"),
-                input_source=metadata.get("input_source", ""),
-                canvas_width=width,
-                canvas_height=height,
-                target_shapes=metadata.get("target_shapes", len(shapes)),
-                actual_shapes=len(shapes),
-                seed=metadata.get("seed", 42),
-                shapes=shapes,
-                generation_time=metadata.get("generation_time", 0.0),
-                parameters=metadata.get("parameters", {})
-            )
-            svg_parts.append(xmp_metadata)
-        except Exception as e:
-            print(f"Warning: Failed to generate metadata: {e}")
-    
-    svg_parts.append(f'<rect width="100%" height="100%" fill="{background}"/>')
-    
-    shape_count = 0
-    for shape in shapes:
-        if not isinstance(shape, dict):
-            continue
-        shape_count += 1
-        shape_type = shape.get("type", "").lower()
-        
-        # Normalize fill/stroke
-        fill_raw = shape.get("fill", None)
-        stroke_raw = shape.get("stroke", None)
-        fill_color = _to_rgb_string(fill_raw) or f"hsl({(shape_count*137)%360},70%,50%)"
-        stroke_color = _to_rgb_string(stroke_raw) or "none"
-        stroke_width = shape.get("stroke-width", shape.get("stroke_width", 0.5))
-        
-        # Get opacity from shape, default to 0.7
-        opacity = shape.get("opacity", 0.7)
-        
-        # Circle handling
-        if shape_type == "circle":
-            cx = shape.get("cx", 0)
-            cy = shape.get("cy", 0)
-            r = shape.get("r", 1)
-            svg_parts.append(
-                f'<circle cx="{cx}" cy="{cy}" r="{r}" '
-                f'fill="{fill_color}" stroke="{stroke_color}" stroke-width="{stroke_width}" '
-                f'opacity="{opacity}"/>'
-            )
-            continue
-        
-        points = shape.get("points", [])
-        if not points:
-            continue
-        
-        # Triangles
-        if shape_type == "triangle" and len(points) >= 3:
-            pts = points[:3]
-            path_data = f"M {pts[0][0]},{pts[0][1]} L {pts[1][0]},{pts[1][1]} L {pts[2][0]},{pts[2][1]} Z"
-            svg_parts.append(
-                f'<path d="{path_data}" fill="{fill_color}" stroke="{stroke_color}" '
-                f'stroke-width="{stroke_width}" opacity="{opacity}"/>'
-            )
-            continue
-        
-        # Generic polygon
-        points_str = " ".join(f"{int(p[0])},{int(p[1])}" for p in points)
-        svg_parts.append(
-            f'<polygon points="{points_str}" fill="{fill_color}" stroke="{stroke_color}" '
-            f'stroke-width="{stroke_width}" opacity="{opacity}"/>'
-        )
-
-    svg_parts.append("</svg>")
-
-    print(f"SVG export: exported {shape_count} shapes with metadata")
-    return "\n".join(svg_parts)
+logger = logging.getLogger(__name__)
 
 
 def save_svg(
-    shapes,
-    filepath,
-    width=800,
-    height=600,
-    background="white",
-    metadata=None
-):
-    """Save shapes to SVG file with optional metadata."""
-    import logging
-    import sys
-
-    logging.basicConfig(
-        stream=sys.stdout,
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s: %(message)s",
-    )
-
+    shapes: List[Dict[str, Any]],
+    filepath: str,
+    width: int,
+    height: int,
+    metadata: Optional[Dict[str, Any]] = None,
+    regions: Optional[Dict[int, List[Dict]]] = None
+) -> bool:
+    """
+    Save shapes to SVG file with XMP metadata and optional layer grouping.
+    
+    Args:
+        shapes: List of shape dictionaries
+        filepath: Output SVG file path
+        width: Canvas width in pixels
+        height: Canvas height in pixels
+        metadata: Optional metadata dict for XMP embedding
+        regions: Optional dict mapping region_id to list of shapes for layer grouping
+        
+    Returns:
+        True if successful, False otherwise
+    """
     try:
-        svg_content = export_svg(shapes, width, height, background, metadata)
-        logging.info(
-            "svg_export.save_svg: writing '%s' (%d bytes)", filepath, len(svg_content)
-        )
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(svg_content)
-        logging.info("svg_export.save_svg: success writing '%s'", filepath)
+        # Build SVG content
+        svg_lines = [
+            '<?xml version="1.0" encoding="UTF-8" standalone="no"?>',
+            f'<svg width="{width}" height="{height}" '
+            'xmlns="http://www.w3.org/2000/svg" '
+            'xmlns:xlink="http://www.w3.org/1999/xlink" '
+            'xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" '
+            'xmlns:xmp="http://ns.adobe.com/xap/1.0/" '
+            'xmlns:dc="http://purl.org/dc/elements/1.1/" '
+            'xmlns:cubist="http://cubist-art.local/ns/1.0/">',
+        ]
+        
+        # Add metadata if provided
+        if metadata:
+            svg_lines.append(_generate_xmp_metadata(metadata, width, height, len(shapes)))
+        
+        # Add shapes - either grouped by region or flat
+        if regions:
+            # Layer grouping mode
+            svg_lines.extend(_generate_grouped_shapes(regions))
+        else:
+            # Flat mode (backward compatible)
+            svg_lines.extend(_generate_flat_shapes(shapes))
+        
+        svg_lines.append('</svg>')
+        
+        # Write to file
+        svg_content = '\n'.join(svg_lines)
+        file_size = len(svg_content.encode('utf-8'))
+        
+        logger.info(f"svg_export.save_svg: writing '{filepath}' ({file_size} bytes)")
+        
+        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        Path(filepath).write_text(svg_content, encoding='utf-8')
+        
+        logger.info(f"svg_export.save_svg: success writing '{filepath}'")
+        
+        print(f"SVG export: exported {len(shapes)} shapes with metadata")
         return True
-    except Exception:
-        logging.exception("svg_export.save_svg: failed writing '%s'", filepath)
+        
+    except Exception as e:
+        logger.error(f"svg_export.save_svg: failed to write '{filepath}': {e}")
+        print(f"SVG export error: {e}")
         return False
 
 
-# Compatibility aliases
-write_svg = save_svg
-export_shapes_to_svg = export_svg
+def _generate_xmp_metadata(metadata: Dict[str, Any], width: int, height: int, shape_count: int) -> str:
+    """Generate Adobe XMP metadata block."""
+    
+    # Extract metadata fields with defaults
+    geometry = metadata.get('geometry', 'unknown')
+    fill_method = metadata.get('fill_method', 'default')
+    input_source = metadata.get('input_source', '')
+    target_shapes = metadata.get('target_shapes', shape_count)
+    seed = metadata.get('seed', 42)
+    gen_time = metadata.get('generation_time', 0.0)
+    version = metadata.get('version', VERSION)
+    
+    # Format timestamp
+    create_date = datetime.now().isoformat()
+    
+    # Calculate space utilization (simplified - actual shapes vs canvas area)
+    # This is approximate - real calculation would sample the canvas
+    space_util = min(99.9, (shape_count / max(target_shapes, 1)) * 90.0)
+    
+    # Build parameter string
+    param_lines = []
+    if 'parameters' in metadata and metadata['parameters']:
+        for key, val in metadata['parameters'].items():
+            param_lines.append(f"      <cubist:param_{key}>{val}</cubist:param_{key}>")
+    
+    params_xml = '\n'.join(param_lines) if param_lines else ''
+    
+    # Build metadata block
+    metadata_xml = f"""  <metadata>
+    <rdf:RDF>
+      <rdf:Description>
+        <dc:format>image/svg+xml</dc:format>
+        <dc:creator>{METADATA_TOOL_NAME}</dc:creator>
+        <xmp:CreatorTool>{METADATA_TOOL_NAME}</xmp:CreatorTool>
+        <xmp:CreateDate>{create_date}</xmp:CreateDate>
+        <xmp:Rating>0</xmp:Rating>
+        
+        <cubist:version>{version}</cubist:version>
+        <cubist:geometry>{geometry}</cubist:geometry>
+        <cubist:fillMethod>{fill_method}</cubist:fillMethod>
+        <cubist:inputSource>{input_source}</cubist:inputSource>
+        
+        <cubist:canvasWidth>{width}</cubist:canvasWidth>
+        <cubist:canvasHeight>{height}</cubist:canvasHeight>
+        <cubist:targetShapes>{target_shapes}</cubist:targetShapes>
+        <cubist:actualShapes>{shape_count}</cubist:actualShapes>
+        <cubist:seed>{seed}</cubist:seed>
+        
+        <cubist:spaceUtilization>{space_util:.1f}</cubist:spaceUtilization>
+        <cubist:generationTime>{gen_time:.2f}</cubist:generationTime>
+{params_xml}
+      </rdf:Description>
+    </rdf:RDF>
+  </metadata>"""
+    
+    return metadata_xml
 
 
-# SVG shape counter
-def count_svg_shapes(svg_source) -> int:
+def _generate_grouped_shapes(regions: Dict[int, List[Dict]]) -> List[str]:
     """
-    Count common SVG shape elements.
+    Generate SVG shapes grouped by region with <g> tags for layer organization.
+    
+    Args:
+        regions: Dict mapping region_id to list of shapes
+        
+    Returns:
+        List of SVG lines with grouped shapes
     """
-    import re
-    from pathlib import Path
-
-    try:
-        if isinstance(svg_source, (str, Path)) and Path(svg_source).exists():
-            text = Path(svg_source).read_text(encoding="utf-8", errors="ignore")
-        else:
-            text = str(svg_source or "")
-    except Exception:
-        text = str(svg_source or "")
-
-    tags = ["circle", "path", "rect", "ellipse", "polygon", "polyline"]
-    total = 0
-    for t in tags:
-        try:
-            total += len(
-                re.findall(
-                    r"<\s*" + re.escape(t) + r"[\s>/]", text, flags=re.IGNORECASE
-                )
-            )
-        except Exception:
+    lines = []
+    
+    # Sort regions by ID for consistent ordering
+    for region_id in sorted(regions.keys()):
+        shapes = regions[region_id]
+        if not shapes:
             continue
-    return total
+        
+        # Determine geometry name from first shape
+        geometry_name = shapes[0].get('region_geometry', 'unknown')
+        
+        # Create layer group
+        lines.append(f'  <g id="region_{region_id}" data-region="{region_id}" data-geometry="{geometry_name}">')
+        lines.append(f'    <title>Region {region_id} - {geometry_name} ({len(shapes)} shapes)</title>')
+        
+        # Add shapes
+        for shape in shapes:
+            shape_svg = _shape_to_svg(shape, indent='    ')
+            if shape_svg:
+                lines.append(shape_svg)
+        
+        lines.append('  </g>')
+    
+    return lines
+
+
+def _generate_flat_shapes(shapes: List[Dict]) -> List[str]:
+    """
+    Generate SVG shapes without grouping (backward compatible).
+    
+    Args:
+        shapes: List of shape dictionaries
+        
+    Returns:
+        List of SVG lines
+    """
+    lines = []
+    
+    for shape in shapes:
+        shape_svg = _shape_to_svg(shape, indent='  ')
+        if shape_svg:
+            lines.append(shape_svg)
+    
+    return lines
+
+
+def _shape_to_svg(shape: Dict[str, Any], indent: str = '  ') -> Optional[str]:
+    """
+    Convert shape dictionary to SVG element string.
+    
+    Args:
+        shape: Shape dictionary
+        indent: Indentation string
+        
+    Returns:
+        SVG element string or None if invalid
+    """
+    shape_type = shape.get('type', '').lower()
+    
+    # Common attributes
+    fill = shape.get('fill', 'rgb(128,128,128)')
+    stroke = shape.get('stroke', 'none')
+    stroke_width = shape.get('stroke_width', 0)
+    opacity = shape.get('opacity', 0.7)
+    
+    try:
+        if shape_type == 'circle':
+            cx = int(shape['cx'])
+            cy = int(shape['cy'])
+            r = int(shape['r'])
+            return f'{indent}<circle cx="{cx}" cy="{cy}" r="{r}" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" opacity="{opacity}"/>'
+        
+        elif shape_type == 'polygon':
+            points = shape.get('points', [])
+            if not points:
+                return None
+            # Integer coordinates
+            points_str = ' '.join(f"{int(x)},{int(y)}" for x, y in points)
+            return f'{indent}<polygon points="{points_str}" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" opacity="{opacity}"/>'
+        
+        elif shape_type == 'rect':
+            x = int(shape.get('x', 0))
+            y = int(shape.get('y', 0))
+            w = int(shape.get('width', 0))
+            h = int(shape.get('height', 0))
+            return f'{indent}<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{fill}" stroke="{stroke}" stroke-width="{stroke_width}" opacity="{opacity}"/>'
+        
+        else:
+            # Unknown shape type
+            return None
+            
+    except (KeyError, ValueError, TypeError) as e:
+        logger.warning(f"Failed to convert shape to SVG: {e}")
+        return None
+
+
+# Testing
+if __name__ == "__main__":
+    # Test basic SVG export
+    test_shapes = [
+        {'type': 'circle', 'cx': 100, 'cy': 100, 'r': 50, 'fill': 'rgb(255,0,0)', 'stroke': 'none', 'stroke_width': 0, 'opacity': 0.7},
+        {'type': 'rect', 'x': 200, 'y': 200, 'width': 100, 'height': 50, 'fill': 'rgb(0,255,0)', 'stroke': 'none', 'stroke_width': 0, 'opacity': 0.7},
+    ]
+    
+    test_metadata = {
+        'geometry': 'test',
+        'fill_method': 'default',
+        'target_shapes': 2,
+        'seed': 42,
+        'generation_time': 1.5
+    }
+    
+    print("Testing flat export...")
+    success = save_svg(test_shapes, 'test_flat.svg', 800, 600, test_metadata)
+    print(f"Flat export: {'success' if success else 'failed'}")
+    
+    print("\nTesting grouped export...")
+    test_regions = {
+        0: [test_shapes[0]],
+        255: [test_shapes[1]]
+    }
+    success = save_svg(test_shapes, 'test_grouped.svg', 800, 600, test_metadata, test_regions)
+    print(f"Grouped export: {'success' if success else 'failed'}")

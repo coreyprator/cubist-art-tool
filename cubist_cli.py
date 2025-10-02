@@ -14,6 +14,9 @@ from typing import Any, Dict
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# Import version
+from version import VERSION, METADATA_TOOL_NAME
+
 # Import geometry system and export
 from geometry_loader import load_geometry_plugins
 from svg_export import save_svg
@@ -162,6 +165,7 @@ def run_single_geometry_mode(args):
         
         # Collect metadata
         metadata = {
+            "version": VERSION,
             "geometry": args.geometry,
             "fill_method": "cascade" if params.get("cascade_fill_enabled") else "default",
             "input_source": str(Path(args.input).resolve()),
@@ -289,11 +293,18 @@ def run_hybrid_mode(args):
             verbose=args.verbose
         )
         
-        shapes = subdivision.generate_hybrid_artwork(
+        # CRITICAL FIX: Handle new dict return format
+        result = subdivision.generate_hybrid_artwork(
             region_assignments=region_assignments,
             seed=args.seed,
             cascade_fill_enabled=args.cascade
         )
+        
+        # Extract shapes from result dict
+        shapes = result['shapes']
+        regions_data = result.get('regions', {})
+        gen_metadata = result.get('metadata', {})
+        
     except Exception as e:
         print(f"Error generating hybrid artwork: {e}", file=sys.stderr)
         import traceback
@@ -308,6 +319,7 @@ def run_hybrid_mode(args):
         
         # Collect metadata
         metadata = {
+            "version": VERSION,
             "geometry": "hybrid_multi",
             "fill_method": "cascade" if args.cascade else "default",
             "input_source": str(Path(args.input).resolve()),
@@ -319,7 +331,10 @@ def run_hybrid_mode(args):
             "parameters": {
                 "regions": len(region_assignments),
                 "cascade_enabled": args.cascade
-            }
+            },
+            # Add hybrid-specific metadata
+            "hybrid_metadata": gen_metadata,
+            "regions_data": {str(k): len(v) for k, v in regions_data.items()}
         }
         
         success = save_svg(
@@ -327,7 +342,8 @@ def run_hybrid_mode(args):
             filepath=str(svg_path),
             width=canvas_size[0],
             height=canvas_size[1],
-            metadata=metadata
+            metadata=metadata,
+            regions=regions_data  # Pass regions for layer grouping
         )
         
         if not success:

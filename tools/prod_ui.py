@@ -455,7 +455,7 @@ def _run_hybrid_generation(
 
     try:
         result = subprocess.run(
-            cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=600  # 10 min timeout for hybrid
+            cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=600
         )
         elapsed = time.time() - start_time
 
@@ -482,11 +482,25 @@ def _run_hybrid_generation(
             except Exception:
                 pass
 
+            # FIX: Build parameter summary for gallery display
+            param_summary = {}
+            for region_id, assignment in region_assignments.items():
+                geometry = assignment.get('geometry', 'unknown')
+                target_count = assignment.get('target_count', 0)
+                # Format as readable string
+                param_summary[f"region_{region_id}"] = f"{geometry} x{target_count}"
+                
+                # Add custom parameters if any
+                params = assignment.get('params', {})
+                for param_name, param_value in params.items():
+                    if param_name not in ['cascade_fill_enabled', 'seed', 'verbose']:
+                        param_summary[f"r{region_id}_{param_name}"] = param_value
+
             _log(
                 f"✓ hybrid ({fill_method}): {shapes} shapes, {svg_size} bytes ({elapsed:.2f}s)",
                 "success",
             )
-            return True, f"✓ hybrid ({fill_method}): {shapes} shapes", {}
+            return True, f"✓ hybrid ({fill_method}): {shapes} shapes", param_summary
         else:
             error_msg = result.stderr.strip() if result.stderr else "Unknown error"
             _log(
