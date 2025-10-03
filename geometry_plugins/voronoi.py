@@ -234,10 +234,10 @@ def generate(
 
 def _sample_image_color(
     input_image, x: float, y: float, canvas_width: int, canvas_height: int
-) -> Tuple[int, int, int]:
-    """Sample color from input image."""
+) -> str:  # CHANGED: was Tuple[int, int, int]
+    """Sample color from input image and return SVG-compatible color string."""
     if input_image is None:
-        return (128, 128, 128)
+        return "rgb(128, 128, 128)"  # CHANGED: was (128, 128, 128)
 
     try:
         img_width, img_height = input_image.size
@@ -249,16 +249,19 @@ def _sample_image_color(
 
         if isinstance(pixel, tuple):
             if len(pixel) >= 3:
-                return (int(pixel[0]), int(pixel[1]), int(pixel[2]))
+                r, g, b = int(pixel[0]), int(pixel[1]), int(pixel[2])
+                return f"rgb({r}, {g}, {b})"  # CHANGED: was (r, g, b)
             elif len(pixel) == 1:
-                return (int(pixel[0]), int(pixel[0]), int(pixel[0]))
+                gray = int(pixel[0])
+                return f"rgb({gray}, {gray}, {gray})"  # CHANGED: was (gray, gray, gray)
         else:
-            return (int(pixel), int(pixel), int(pixel))
+            gray = int(pixel)
+            return f"rgb({gray}, {gray}, {gray})"  # CHANGED: was (gray, gray, gray)
 
     except Exception:
-        return (128, 128, 128)
+        return "rgb(128, 128, 128)"  # CHANGED: was (128, 128, 128)
 
-    return (128, 128, 128)
+    return "rgb(128, 128, 128)"  # CHANGED: was (128, 128, 128)
 
 
 def _voronoi_finite_polygons_2d(voronoi) -> List[Tuple[List[Tuple[float, float]], int]]:

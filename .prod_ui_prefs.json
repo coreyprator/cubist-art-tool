@@ -1,0 +1,57 @@
+{
+  "input_image": "G:\\My Drive\\Code\\Python\\cubist_art\\input\\x_your_input_image.jpg",
+  "mask_image": "",
+  "background_image": "",
+  "points": 1000,
+  "seed": 42,
+  "export_svg": true,
+  "enable_plugin_exec": true,
+  "verbose_probe": true,
+  "auto_open_gallery": true,
+  "geoms": [
+    "rectangles",
+    "delaunay",
+    "voronoi",
+    "poisson_disk",
+    "scatter_circles"
+  ],
+  "fill_methods": [
+    "default",
+    "cascade"
+  ],
+  "geometry_parameters": {
+    "rectangles": {
+      "min_size_multiplier": 1,
+      "max_size_multiplier": 10,
+      "aspect_ratio_variance": 10,
+      "overlap_tolerance": 0,
+      "cascade_intensity": 1,
+      "opacity": 1
+    },
+    "delaunay": {
+      "cascade_intensity": 1,
+      "opacity": 1
+    },
+    "voronoi": {
+      "cascade_intensity": 1,
+      "opacity": 1
+    },
+    "poisson_disk": {
+      "min_dist_factor": 0.03,
+      "radius_multiplier": 1.2,
+      "cascade_intensity": 1,
+      "opacity": 1
+    },
+    "scatter_circles": {
+      "min_dist_factor": 0.03,
+      "radius_multiplier": 1.2,
+      "jitter": 1,
+      "cascade_intensity": 1,
+      "opacity": 1
+    }
+  },
+  "hybrid_mode": false,
+  "region_assignments": {},
+  "auto_open": true,
+  "verbose": true
+}
